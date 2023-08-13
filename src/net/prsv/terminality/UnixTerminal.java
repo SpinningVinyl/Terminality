@@ -1,14 +1,16 @@
 package net.prsv.terminality;
 
+import com.sun.jna.Platform;
+
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
-public class LinuxTerminal implements Terminal {
+public class UnixTerminal implements Terminal {
 
-    private static LinuxLibC.Termios originalState = new LinuxLibC.Termios();
+    private static PosixLibC.Termios originalState = new PosixLibC.Termios();
 
-    private final LinuxLibC lib = LinuxLibC.INSTANCE;
+    private final PosixLibC lib = PosixLibC.INSTANCE;
 
     private final InputStream input;
     private final BufferedOutputStream output;
@@ -17,7 +19,7 @@ public class LinuxTerminal implements Terminal {
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
 
-    public LinuxTerminal() {
+    public UnixTerminal() {
         input = System.in;
         output = new BufferedOutputStream(System.out);
         this.charset = DEFAULT_CHARSET;
@@ -25,9 +27,11 @@ public class LinuxTerminal implements Terminal {
 
     @Override
     public WindowSize getWindowSize() throws IOException {
-        final LinuxLibC.WinSize winSize = new LinuxLibC.WinSize();
+        final PosixLibC.WinSize winSize = new PosixLibC.WinSize();
 
-        final int returnCode = lib.ioctl(LinuxLibC.STDIN_FD, LinuxLibC.TIOCGWINSZ, winSize);
+        final int returnCode = lib.ioctl(PosixLibC.STDIN_FD,
+                Platform.isMac() ? PosixLibC.TIOCGWINSZ_DARWIN : PosixLibC.TIOCGWINSZ,
+                winSize);
 
         if (returnCode != 0) {
             throw new IOException(String.format("ioctl failed with return code[%d]", returnCode));
@@ -39,24 +43,24 @@ public class LinuxTerminal implements Terminal {
     @Override
     public void begin() throws IOException {
         originalState = getTerminalAttrs();
-        LinuxLibC.Termios termios = LinuxLibC.Termios.copy(originalState);
-        termios.c_lflag &= ~(LinuxLibC.ECHO | LinuxLibC.ICANON | LinuxLibC.IEXTEN | LinuxLibC.ISIG);
-        termios.c_iflag &= ~(LinuxLibC.IXON | LinuxLibC.ICRNL);
-        termios.c_oflag &= ~(LinuxLibC.OPOST);
+        PosixLibC.Termios termios = PosixLibC.Termios.copy(originalState);
+        termios.c_lflag &= ~(PosixLibC.ECHO | PosixLibC.ICANON | PosixLibC.IEXTEN | PosixLibC.ISIG);
+        termios.c_iflag &= ~(PosixLibC.IXON | PosixLibC.ICRNL);
+        termios.c_oflag &= ~(PosixLibC.OPOST);
         setTerminalAttrs(termios);
     }
 
-    private LinuxLibC.Termios getTerminalAttrs() throws IOException {
-        LinuxLibC.Termios t = new LinuxLibC.Termios();
-        int returnCode = lib.tcgetattr(LinuxLibC.STDIN_FD, t);
+    private PosixLibC.Termios getTerminalAttrs() throws IOException {
+        PosixLibC.Termios t = new PosixLibC.Termios();
+        int returnCode = lib.tcgetattr(PosixLibC.STDIN_FD, t);
         if (returnCode != 0) {
             throw new IOException(String.format("tcgetattr failed with return code[%d]", returnCode));
         }
         return t;
     }
 
-    private void setTerminalAttrs(LinuxLibC.Termios termios) throws IOException {
-        int returnCode = lib.tcsetattr(LinuxLibC.STDIN_FD, LinuxLibC.TCSANOW, termios);
+    private void setTerminalAttrs(PosixLibC.Termios termios) throws IOException {
+        int returnCode = lib.tcsetattr(PosixLibC.STDIN_FD, PosixLibC.TCSANOW, termios);
         if (returnCode != 0) {
             throw new IOException(String.format("tcsetattr failed with return code[%d]", returnCode));
         }
@@ -68,7 +72,7 @@ public class LinuxTerminal implements Terminal {
         setCursorVisibility(true);
         writeControlSequence((byte) 'H'); // reset the cursor position
         flush();
-        int returnCode = lib.tcsetattr(LinuxLibC.STDIN_FD, LinuxLibC.TCSAFLUSH, originalState);
+        int returnCode = lib.tcsetattr(PosixLibC.STDIN_FD, PosixLibC.TCSAFLUSH, originalState);
         if (returnCode != 0) {
             throw new IOException(String.format("tcsetattr failed with return code[%x]", returnCode));
         }
@@ -84,9 +88,9 @@ public class LinuxTerminal implements Terminal {
         writeControlSequence(((row + 1) + ";" + (column + 1) + "H").getBytes());
     }
 
+    @Override
     public void setCursorVisibility(boolean b) throws IOException {
-        String s = "?25" + (b ? "h" : "l");
-        writeControlSequence(s.getBytes());
+        writeControlSequence(("?25" + (b ? "h" : "l")).getBytes());
     }
 
     @Override
