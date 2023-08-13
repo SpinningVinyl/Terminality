@@ -57,6 +57,10 @@ public interface Terminal {
      */
     void flush() throws IOException;
 
+    boolean hasColor() throws IOException;
+
+    int getColors() throws IOException;
+
     class WindowSize {
         public final int rows, columns;
 

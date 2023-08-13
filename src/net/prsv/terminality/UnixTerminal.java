@@ -26,6 +26,26 @@ public class UnixTerminal implements Terminal {
     }
 
     @Override
+    public boolean hasColor() throws IOException {
+        return getColors() != -1;
+    }
+
+    @Override
+    public int getColors() throws IOException {
+        int colors;
+        Process p = new ProcessBuilder("tput", "colors").start();
+        BufferedReader stdIn = new BufferedReader(new InputStreamReader(p.getInputStream()));
+        String s = stdIn.readLine();
+        stdIn.close();
+        try {
+            colors = Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            colors = -1;
+        }
+        return colors;
+    }
+
+    @Override
     public WindowSize getWindowSize() throws IOException {
         final PosixLibC.WinSize winSize = new PosixLibC.WinSize();
 
@@ -77,6 +97,15 @@ public class UnixTerminal implements Terminal {
             throw new IOException(String.format("tcsetattr failed with return code[%x]", returnCode));
         }
     }
+
+    public void registerResizeListener(final Runnable runnable) throws IOException {
+        lib.signal(PosixLibC.SIGWINCH, new PosixLibC.sig_t() {
+            public synchronized void invoke(int signal) {
+                runnable.run();
+            }
+        });
+    }
+
 
     @Override
     public void setTitle(String title) throws IOException {
