@@ -63,12 +63,12 @@ public interface PosixLibC extends Library {
     }
 
 
-    int tcgetattr(int fd, Termios termios);
+    int tcgetattr(int fd, Termios termios) throws LastErrorException;
 
     int tcsetattr(int fd, int optional_actions,
-                  Termios termios);
+                  Termios termios) throws LastErrorException;
 
-    int ioctl(int fd, int opt, WinSize winsize);
+    int ioctl(int fd, int opt, WinSize winsize) throws LastErrorException;
 
     int isatty(int fd);
 
