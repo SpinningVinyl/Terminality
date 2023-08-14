@@ -58,7 +58,7 @@ public interface Terminal {
     void flush() throws IOException;
 
     /**
-     * Checks whether the terminal supports color.
+     * Checks whether the terminal supports color output.
      * @return {@code true} if the terminal supports color
      */
     boolean hasColor() throws IOException;
@@ -68,6 +68,13 @@ public interface Terminal {
      * @return the number of colors that the terminal supports
      */
     int getColors() throws IOException;
+
+    /**
+     * Checks whether the size of the terminal window has changed since the last time this method was invoked.
+     * Subsequent calls to this method will return {@code false} until the terminal window is resized again.
+     * @return {@code true} if the size of the terminal window has changed since the last time this method was invoked
+     */
+    boolean sizeChanged();
 
     class WindowSize {
         public final int rows, columns;

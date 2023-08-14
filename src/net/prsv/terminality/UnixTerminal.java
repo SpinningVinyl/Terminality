@@ -4,8 +4,11 @@ import com.sun.jna.LastErrorException;
 import com.sun.jna.Platform;
 
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class UnixTerminal implements Terminal {
 
@@ -13,15 +16,17 @@ public class UnixTerminal implements Terminal {
 
     private final PosixLibC lib = PosixLibC.INSTANCE;
 
-    private final InputStream input;
+    private final BufferedReader input;
     private final BufferedOutputStream output;
     private final Charset charset;
+
+    private final AtomicBoolean sizeChange = new AtomicBoolean(false);
 
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
 
     public UnixTerminal() {
-        input = System.in;
+        input = new BufferedReader(new InputStreamReader(System.in));
         output = new BufferedOutputStream(System.out);
         this.charset = DEFAULT_CHARSET;
     }
@@ -67,12 +72,20 @@ public class UnixTerminal implements Terminal {
             throw new RuntimeException("Cannot initialize: not a TTY");
         }
         registerShutdownHook();
+        registerResizeListener(() -> sizeChange.set(true));
         originalState = getTerminalAttrs();
         PosixLibC.Termios termios = PosixLibC.Termios.copy(originalState);
         termios.c_lflag &= ~(PosixLibC.ECHO | PosixLibC.ICANON | PosixLibC.IEXTEN | PosixLibC.ISIG);
         termios.c_iflag &= ~(PosixLibC.IXON | PosixLibC.ICRNL);
         termios.c_oflag &= ~(PosixLibC.OPOST);
         setTerminalAttrs(termios);
+    }
+
+    @Override
+    public boolean sizeChanged() {
+        boolean result = sizeChange.get();
+        sizeChange.set(false);
+        return result;
     }
 
     private synchronized PosixLibC.Termios getTerminalAttrs() throws IOException {
@@ -110,7 +123,7 @@ public class UnixTerminal implements Terminal {
         setTerminalAttrs(originalState);
     }
 
-    public void registerResizeListener(final Runnable runnable) throws IOException {
+    private void registerResizeListener(final Runnable runnable) throws IOException {
         lib.signal(PosixLibC.SIGWINCH, new PosixLibC.sig_t() {
             public synchronized void invoke(int signal) {
                 runnable.run();
@@ -191,6 +204,41 @@ public class UnixTerminal implements Terminal {
 
     private boolean isTTY() {
         return lib.isatty(PosixLibC.STDIN_FD) == 1;
+    }
+
+    public char read() throws IOException {
+        return readChar(input);
+    }
+
+    private char readChar(BufferedReader in) throws IOException {
+        if (in.ready()) {
+            int readChar = in.read();
+            return Character.toChars(readChar)[0];
+        }
+        else return '\u0000';
+
+//        byte[] buf = new byte[4];
+//        int len = 0;
+//        while(true) {
+//            if (len >= buf.length) {
+//                return '\u0000';
+//            }
+//            int b = in.read();
+//            if (b == -1) return '\u0000';
+//            buf[len++] = (byte) b;
+//            char c = decodeChar(len, buf);
+//            if (c != '\u0000') return c;
+//        }
+    }
+
+    private int ctrlKey(int key) {
+        return key & 0x1f;
+    }
+
+    private synchronized char decodeChar(int length, byte... bytes) {
+        CharBuffer out = charset.decode(ByteBuffer.wrap(bytes, 0, length));
+        if (out.position() == 0) return '\u0000';
+        return out.get(0);
     }
 
 
