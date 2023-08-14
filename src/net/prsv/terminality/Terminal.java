@@ -5,60 +5,68 @@ import java.io.IOException;
 public interface Terminal {
 
     /**
-     * Returns the size of the terminal window
+     * Returns the size of the terminal window.
      * @return {@code Terminal.WindowSize} object containing size of the terminal window
      */
     WindowSize getWindowSize() throws IOException;
 
     /**
-     * Saves the original state and puts the terminal into the raw mode
+     * Saves the original state and puts the terminal into the raw mode.
      */
     void begin() throws IOException;
 
     void setCursorVisibility(boolean b) throws IOException;
 
     /**
-     * Restores the original state of the terminal
+     * Restores the original state of the terminal.
      */
     void end() throws IOException;
 
     /**
-     * Set the title of the terminal window
+     * Set the title of the terminal window.
      * @param title Title to be set
      */
     void setTitle(String title) throws IOException;
 
     /**
-     * Moves the cursor to the specified position
+     * Moves the cursor to the specified position.
      * @param row vertical coordinate of the cursor
      * @param column horizontal coordinate of the cursor
      */
     void setCursorPosition(int row, int column) throws IOException;
 
     /**
-     * Outputs a single character to the output stream
+     * Outputs a single character to the output stream.
      * @param c character to be written to the output stream
      */
     void put(char c) throws IOException;
 
     /**
-     * Outputs a string to the output stream
+     * Outputs a string to the output stream.
      * @param str string to be written to the output stream
      */
     void put(String str) throws IOException;
 
     /**
-     * Clears the terminal window
+     * Clears the terminal window.
      */
     void clear() throws IOException;
 
     /**
-     * Flushes the output stream
+     * Flushes the output stream.
      */
     void flush() throws IOException;
 
+    /**
+     * Checks whether the terminal supports color.
+     * @return {@code true} if the terminal supports color
+     */
     boolean hasColor() throws IOException;
 
+    /**
+     * Returns the number of colors that the terminal supports.
+     * @return the number of colors that the terminal supports
+     */
     int getColors() throws IOException;
 
     class WindowSize {

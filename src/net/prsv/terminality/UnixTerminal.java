@@ -27,12 +27,12 @@ public class UnixTerminal implements Terminal {
     }
 
     @Override
-    public boolean hasColor() throws IOException {
+    public synchronized boolean hasColor() throws IOException {
         return getColors() != -1;
     }
 
     @Override
-    public int getColors() throws IOException {
+    public synchronized int getColors() throws IOException {
         int colors;
         Process p = new ProcessBuilder("tput", "colors").start();
         BufferedReader stdIn = new BufferedReader(new InputStreamReader(p.getInputStream()));
@@ -47,7 +47,7 @@ public class UnixTerminal implements Terminal {
     }
 
     @Override
-    public WindowSize getWindowSize() throws IOException {
+    public synchronized WindowSize getWindowSize() throws IOException {
         final PosixLibC.WinSize winSize = new PosixLibC.WinSize();
 
         final int returnCode = lib.ioctl(PosixLibC.STDIN_FD,
@@ -62,10 +62,11 @@ public class UnixTerminal implements Terminal {
     }
 
     @Override
-    public void begin() throws IOException, RuntimeException {
+    public synchronized void begin() throws IOException, RuntimeException {
         if (!isTTY()) {
             throw new RuntimeException("Cannot initialize: not a TTY");
         }
+        registerShutdownHook();
         originalState = getTerminalAttrs();
         PosixLibC.Termios termios = PosixLibC.Termios.copy(originalState);
         termios.c_lflag &= ~(PosixLibC.ECHO | PosixLibC.ICANON | PosixLibC.IEXTEN | PosixLibC.ISIG);
@@ -74,7 +75,7 @@ public class UnixTerminal implements Terminal {
         setTerminalAttrs(termios);
     }
 
-    private PosixLibC.Termios getTerminalAttrs() throws IOException {
+    private synchronized PosixLibC.Termios getTerminalAttrs() throws IOException {
         int returnCode;
         PosixLibC.Termios t = new PosixLibC.Termios();
         try {
@@ -88,7 +89,7 @@ public class UnixTerminal implements Terminal {
         return t;
     }
 
-    private void setTerminalAttrs(PosixLibC.Termios termios) throws IOException {
+    private synchronized void setTerminalAttrs(PosixLibC.Termios termios) throws IOException {
         int returnCode;
         try {
             returnCode = lib.tcsetattr(PosixLibC.STDIN_FD, PosixLibC.TCSANOW, termios);
@@ -102,7 +103,7 @@ public class UnixTerminal implements Terminal {
 
     @Override
     public void end() throws IOException {
-        clear(); // clear screen
+        clear();
         setCursorVisibility(true);
         writeControlSequence((byte) 'H'); // reset the cursor position
         flush();
@@ -117,6 +118,19 @@ public class UnixTerminal implements Terminal {
         });
     }
 
+
+    // try to leave the console in a usable state if the process is terminated
+    private void registerShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            public void run() {
+                try {
+                    end();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+    }
 
     @Override
     public void setTitle(String title) throws IOException {
@@ -165,13 +179,13 @@ public class UnixTerminal implements Terminal {
         writeOutput(output);
     }
 
-    private void writeOutput(byte... bytes) throws IOException {
+    private synchronized void writeOutput(byte... bytes) throws IOException {
         synchronized (output) {
             output.write(bytes);
         }
     }
 
-    private byte[] convertCharset(char c) {
+    private synchronized byte[] convertCharset(char c) {
         return charset.encode(Character.toString(c)).array();
     }
 
