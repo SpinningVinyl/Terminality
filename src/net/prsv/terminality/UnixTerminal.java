@@ -6,7 +6,6 @@ import com.sun.jna.Platform;
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class UnixTerminal implements Terminal {
 
@@ -18,51 +17,25 @@ public class UnixTerminal implements Terminal {
     private final BufferedOutputStream output;
     private final Charset charset;
 
-    private final AtomicBoolean sizeChange = new AtomicBoolean(false);
+    private final TerminalResizeListener resizeListener;
+
+    private boolean sizeChange = false;
+
+    private boolean isInitialized = false;
 
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
 
+//  ====================== C O N S T R U C T O R =======================
+
     public UnixTerminal() {
         input = new BufferedReader(new InputStreamReader(System.in));
         output = new BufferedOutputStream(System.out);
-        this.charset = DEFAULT_CHARSET;
+        charset = DEFAULT_CHARSET;
+        resizeListener = new TerminalResizeListener();
     }
 
-    @Override
-    public synchronized boolean hasColor() throws IOException {
-        return getColors() != -1;
-    }
-
-    @Override
-    public synchronized int getColors() throws IOException {
-        int colors;
-        Process p = new ProcessBuilder("tput", "colors").start();
-        BufferedReader stdIn = new BufferedReader(new InputStreamReader(p.getInputStream()));
-        String s = stdIn.readLine();
-        stdIn.close();
-        try {
-            colors = Integer.parseInt(s);
-        } catch (NumberFormatException e) {
-            colors = -1;
-        }
-        return colors;
-    }
-
-    @Override
-    public synchronized WindowSize getWindowSize() throws IOException {
-        final PosixLibC.WinSize winSize = new PosixLibC.WinSize();
-
-        final int returnCode = lib.ioctl(PosixLibC.STDIN_FD,
-                Platform.isMac() ? PosixLibC.TIOCGWINSZ_DARWIN : PosixLibC.TIOCGWINSZ,
-                winSize);
-
-        if (returnCode != 0) {
-            throw new IOException(String.format("ioctl failed with return code[%d]", returnCode));
-        }
-
-        return new WindowSize(winSize.ws_row, winSize.ws_col);
-    }
+//  ==================== P U B L I C   M E T H O D S ===================
 
     @Override
     public synchronized void begin() throws IOException, RuntimeException {
@@ -70,46 +43,14 @@ public class UnixTerminal implements Terminal {
             throw new RuntimeException("Cannot initialize: not a TTY");
         }
         registerShutdownHook();
-        registerResizeListener(() -> sizeChange.set(true));
+        registerResizeListener(resizeListener);
         originalState = getTerminalAttrs();
         PosixLibC.Termios termios = PosixLibC.Termios.copy(originalState);
         termios.c_lflag &= ~(PosixLibC.ECHO | PosixLibC.ICANON | PosixLibC.IEXTEN | PosixLibC.ISIG);
         termios.c_iflag &= ~(PosixLibC.IXON | PosixLibC.ICRNL);
         termios.c_oflag &= ~(PosixLibC.OPOST);
         setTerminalAttrs(termios);
-    }
-
-    @Override
-    public boolean sizeChanged() {
-        boolean result = sizeChange.get();
-        sizeChange.set(false);
-        return result;
-    }
-
-    private synchronized PosixLibC.Termios getTerminalAttrs() throws IOException {
-        int returnCode;
-        PosixLibC.Termios t = new PosixLibC.Termios();
-        try {
-            returnCode = lib.tcgetattr(PosixLibC.STDIN_FD, t);
-        } catch (LastErrorException e) {
-            throw new IOException(e);
-        }
-        if (returnCode != 0) {
-            throw new IOException(String.format("tcgetattr failed with return code[%d]", returnCode));
-        }
-        return t;
-    }
-
-    private synchronized void setTerminalAttrs(PosixLibC.Termios termios) throws IOException {
-        int returnCode;
-        try {
-            returnCode = lib.tcsetattr(PosixLibC.STDIN_FD, PosixLibC.TCSANOW, termios);
-        } catch (LastErrorException e) {
-            throw new IOException(e);
-        }
-        if (returnCode != 0) {
-            throw new IOException(String.format("tcsetattr failed with return code[%d]", returnCode));
-        }
+        isInitialized = true;
     }
 
     @Override
@@ -119,26 +60,14 @@ public class UnixTerminal implements Terminal {
         writeControlSequence((byte) 'H'); // reset the cursor position
         flush();
         setTerminalAttrs(originalState);
+        isInitialized = false;
     }
 
-    private void registerResizeListener(final Runnable runnable) throws IOException {
-        lib.signal(PosixLibC.SIGWINCH, new PosixLibC.sig_t() {
-            public synchronized void invoke(int signal) {
-                runnable.run();
-            }
-        });
-    }
-
-
-    // try to leave the console in a usable state if the process is terminated
-    private void registerShutdownHook() {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                end();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }));
+    public KeyStroke read() throws IOException, RuntimeException {
+        if (!isInitialized) {
+            throw new RuntimeException("The terminal is not initialized");
+        }
+        return readChar(input);
     }
 
     @Override
@@ -179,6 +108,99 @@ public class UnixTerminal implements Terminal {
         output.flush();
     }
 
+    @Override
+    public boolean sizeChanged() {
+        if (sizeChange) {
+            sizeChange = false;
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public synchronized WindowSize getWindowSize() throws IOException {
+        final PosixLibC.WinSize winSize = new PosixLibC.WinSize();
+
+        final int returnCode = lib.ioctl(PosixLibC.STDIN_FD,
+                Platform.isMac() ? PosixLibC.TIOCGWINSZ_DARWIN : PosixLibC.TIOCGWINSZ,
+                winSize);
+
+        if (returnCode != 0) {
+            throw new IOException(String.format("ioctl failed with return code[%d]", returnCode));
+        }
+
+        return new WindowSize(winSize.ws_row, winSize.ws_col);
+    }
+
+    @Override
+    public synchronized boolean hasColor() throws IOException {
+        return getColors() != -1;
+    }
+
+    @Override
+    public synchronized int getColors() throws IOException {
+        int colors;
+        Process p = new ProcessBuilder("tput", "colors").start();
+        BufferedReader stdIn = new BufferedReader(new InputStreamReader(p.getInputStream()));
+        String s = stdIn.readLine();
+        stdIn.close();
+        try {
+            colors = Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            colors = -1;
+        }
+        return colors;
+    }
+
+//  =================== P R I V A T E   M E T H O D S ==================
+
+    private synchronized PosixLibC.Termios getTerminalAttrs() throws IOException {
+        int returnCode;
+        PosixLibC.Termios t = new PosixLibC.Termios();
+        try {
+            returnCode = lib.tcgetattr(PosixLibC.STDIN_FD, t);
+        } catch (LastErrorException e) {
+            throw new IOException(e);
+        }
+        if (returnCode != 0) {
+            throw new IOException(String.format("tcgetattr failed with return code[%d]", returnCode));
+        }
+        return t;
+    }
+
+    private synchronized void setTerminalAttrs(PosixLibC.Termios termios) throws IOException {
+        int returnCode;
+        try {
+            returnCode = lib.tcsetattr(PosixLibC.STDIN_FD, PosixLibC.TCSANOW, termios);
+        } catch (LastErrorException e) {
+            throw new IOException(e);
+        }
+        if (returnCode != 0) {
+            throw new IOException(String.format("tcsetattr failed with return code[%d]", returnCode));
+        }
+    }
+
+    // register a Runnable that will be invoked whenever the app receives the signal 28 (SIGWINCH)
+    private void registerResizeListener(final Runnable runnable) throws IOException {
+        lib.signal(PosixLibC.SIGWINCH, new PosixLibC.sig_t() {
+            public synchronized void invoke(int signal) {
+                runnable.run();
+            }
+        });
+    }
+
+
+    // try to leave the console in a usable state if the process is terminated
+    private void registerShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                end();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }));
+    }
+
     private void writeControlSequence(byte... bytes) throws IOException {
         if (bytes == null) return;
         byte[] output = new byte[bytes.length + 2];
@@ -202,9 +224,7 @@ public class UnixTerminal implements Terminal {
         return lib.isatty(PosixLibC.STDIN_FD) == 1;
     }
 
-    public KeyStroke read() throws IOException {
-        return readChar(input);
-    }
+
 
     private KeyStroke ctrlKey(char c) {
         if (c < 32) { // possibly ctrl + something?
@@ -265,7 +285,7 @@ public class UnixTerminal implements Terminal {
         return null;
     }
 
-    public static class SpecialKeyMatcher {
+    private static class SpecialKeyMatcher {
         private final static int S0 = 0, FCHAR = 1, KEY_ID = 2, MOD_STATE = 3, MATCH = 4;
 
         private static final int CTRL_CODE = 4, ALT_CODE = 2, SHIFT_CODE = 1;
@@ -390,6 +410,12 @@ public class UnixTerminal implements Terminal {
         return null;
         }
 
+    }
+
+    private class TerminalResizeListener implements Runnable {
+        public void run() {
+            sizeChange = true;
+        }
     }
 
 }
