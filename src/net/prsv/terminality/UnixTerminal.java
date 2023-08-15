@@ -291,6 +291,11 @@ public class UnixTerminal implements Terminal {
         writeControlSequence("6n".getBytes());
     }
 
+    private CursorPosition queryCursorPosition() throws IOException {
+        writeControlSequence("6n".getBytes());
+        return readCursorPosition(input);
+    }
+
     private CursorPosition readCursorPosition(BufferedReader in) throws IOException {
         if (in.ready()) {
             char[] chars = new char[10];
