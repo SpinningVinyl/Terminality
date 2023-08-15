@@ -285,7 +285,7 @@ public class UnixTerminal implements Terminal {
         return null;
     }
 
-    private void queryCursorPosition() throws IOException {
+    private void queryTerminalSize() throws IOException {
         writeControlSequence("999C".getBytes());
         writeControlSequence("999B".getBytes());
         writeControlSequence("6n".getBytes());
