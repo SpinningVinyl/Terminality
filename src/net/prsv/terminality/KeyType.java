@@ -3,6 +3,7 @@ package net.prsv.terminality;
 public enum KeyType {
     CHARACTER,
     ESCAPE,
+    INSERT,
     LF,
     CR,
     TAB,

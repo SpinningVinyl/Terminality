@@ -246,8 +246,8 @@ public class UnixTerminal implements Terminal {
 
     private KeyStroke readChar(BufferedReader in) throws IOException {
         if (in.ready()) {
-            char[] chars = new char[6];
-            int result = in.read(chars, 0, 4);
+            char[] chars = new char[7];
+            int result = in.read(chars, 0, 7);
             if (result == -1) {
                 return new KeyStroke(KeyType.EOF, false, false);
             }
@@ -263,54 +263,139 @@ public class UnixTerminal implements Terminal {
             if (result == 2) {
                 return altCtrlKey(chars[0], chars[1]);
             } if (result >= 3) {
-                boolean alt = false, ctrl = false, shift = false;
-                if (chars[0] == '\033') {
-                    if (chars[1] == '\033') {
-                        alt = true;
-                    }
-
-                    if (chars[result - 1] != '~') {
-                        switch (chars[result - 1]) {
-                            case 'A': return new KeyStroke(KeyType.ARROW_UP, ctrl, alt);
-                            case 'B': return new KeyStroke(KeyType.ARROW_DOWN, ctrl, alt);
-                            case 'C': return new KeyStroke(KeyType.ARROW_RIGHT, ctrl, alt);
-                            case 'D': return new KeyStroke(KeyType.ARROW_LEFT, ctrl, alt);
-                            case 'H': return new KeyStroke(KeyType.HOME, ctrl, alt);
-                            case 'F': return new KeyStroke(KeyType.END, ctrl, alt);
-                            case 'P': return new KeyStroke(KeyType.F1, ctrl, alt);
-                            case 'Q': return new KeyStroke(KeyType.F2, ctrl, alt);
-                            case 'R': return new KeyStroke(KeyType.F3, ctrl, alt);
-                            case 'S': return new KeyStroke(KeyType.F4, ctrl, alt);
-                            case 'Z': return new KeyStroke(KeyType.REVERSE_TAB, ctrl, alt);
-
-                        }
-                    }
-                    if (chars[1] == '[' || chars[1] == 'O') {
-
-                    }
-                }
+                return SpecialKeyMatcher.match(result, chars);
             }
         }
         return null;
-
-//        byte[] buf = new byte[4];
-//        int len = 0;
-//        while(true) {
-//            if (len >= buf.length) {
-//                return EMPTY_CHAR;
-//            }
-//            int b = in.read();
-//            if (b == -1) return EMPTY_CHAR;
-//            buf[len++] = (byte) b;
-//            char c = decodeChar(len, buf);
-//            if (c != EMPTY_CHAR) return c;
-//        }
     }
 
-//    public char ctrlKey(char c) {
-//        return (char) (c & 0x1f);
-//    }
+    public static class SpecialKeyMatcher {
+        private final static int STATE0 = 0, STATE1 = 1, STATE2 = 2, STATE3 = 3, STATE4 = 4;
 
+        private static final int CTRL_CODE = 4, ALT_CODE = 2, SHIFT_CODE = 1;
 
+        public static KeyStroke match(int len, char... chars) {
+
+            boolean ctrl = false, alt = false, shift = false;
+            int state = STATE0;
+            int num1 = 0, num2 = 0;
+            char first = 0, last = 0;
+            boolean doubleEsc = false;
+            for (int charIdx = 0; charIdx < len; charIdx++) {
+                char c = chars[charIdx];
+                switch (state) {
+                    case STATE0:
+                        if (c != '\033') {
+                            return null;
+                        }
+                        state = STATE1;
+                        continue;
+                    case STATE1:
+                        if (c == '\033' && !doubleEsc) {
+                            doubleEsc = true;
+                            continue;
+                        }
+                        if (c != '[' && c != 'O') {
+                            return null;
+                        }
+                        first = c;
+                        state = STATE2;
+                        continue;
+                    case STATE2:
+                        if (c == ';') {
+                            state = STATE3;
+                        } else if (Character.isDigit(c)) {
+                            num1 = num1*10 + Character.digit(c, 10);
+                        } else {
+                            last = c;
+                            state = STATE4;
+                        }
+                        continue;
+                    case STATE3:
+                        if (Character.isDigit(c)) {
+                            num2 = num2*10 + Character.digit(c, 10);
+                        } else {
+                            last = c;
+                            state = STATE4;
+                        }
+                        continue;
+                    case STATE4:
+                        return null;
+                }
+            }
+            if (state == STATE4) {
+                KeyType kt = null;
+                int mods = num2 - 1;
+                boolean puttyCtrl = false;
+                if (last == '~') {
+                    switch (num1) {
+                        case 1:  kt = KeyType.HOME; break;
+                        case 2:  kt = KeyType.INSERT; break;
+                        case 3:  kt = KeyType.DELETE; break;
+                        case 4:  kt = KeyType.END; break;
+                        case 5:  kt = KeyType.PAGE_UP; break;
+                        case 6:  kt = KeyType.PAGE_DOWN; break;
+                        case 11: kt = KeyType.F1; break;
+                        case 12: kt = KeyType.F2; break;
+                        case 13: kt = KeyType.F3; break;
+                        case 14: kt = KeyType.F4; break;
+                        case 15:
+                        case 16: kt = KeyType.F5; break;
+                        case 17: kt = KeyType.F6; break;
+                        case 18: kt = KeyType.F7; break;
+                        case 19: kt = KeyType.F8; break;
+                        case 20: kt = KeyType.F9; break;
+                        case 21: kt = KeyType.F10; break;
+                        case 23: kt = KeyType.F11; break;
+                        case 24: kt = KeyType.F12; break;
+                    }
+                } else {
+                    switch (last) {
+                        case 'A': kt = KeyType.ARROW_UP; break;
+                        case 'B': kt = KeyType.ARROW_DOWN; break;
+                        case 'C': kt = KeyType.ARROW_RIGHT; break;
+                        case 'D': kt = KeyType.ARROW_LEFT; break;
+                        case 'H': kt = KeyType.HOME; break;
+                        case 'F': kt = KeyType.END; break;
+                        case 'P': kt = KeyType.F1; break;
+                        case 'Q': kt = KeyType.F2; break;
+                        case 'R': kt = KeyType.F3; break;
+                        case 'S': kt = KeyType.F4; break;
+                        case 'Z': kt = KeyType.REVERSE_TAB; break;
+                    }
+                    if (first == 'O') {
+                        if (last >= 'A' && last <= 'D') {
+                            puttyCtrl = true;
+                        }
+                        if (last == 'R') {
+                            mods = -1;
+                        }
+                    }
+                }
+                if (kt == null) {
+                    return null; // unknown key
+                }
+                if (doubleEsc) {
+                    alt = true;
+                } else if (mods >= 0) {
+                    alt = (mods & ALT_CODE) != 0;
+                }
+                if (puttyCtrl) {
+                    ctrl = true;
+                } else if (mods >= 0) {
+                    ctrl = (mods & CTRL_CODE) != 0;
+                }
+                if (mods >= 0) {
+                    shift = (mods & SHIFT_CODE) != 0;
+                }
+
+                return new KeyStroke(kt, ctrl, alt, shift);
+
+            }
+
+        return null;
+        }
+
+    }
 
 }
