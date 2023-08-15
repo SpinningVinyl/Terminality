@@ -6,6 +6,8 @@ import com.sun.jna.Platform;
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class UnixTerminal implements Terminal {
 
@@ -224,8 +226,6 @@ public class UnixTerminal implements Terminal {
         return lib.isatty(PosixLibC.STDIN_FD) == 1;
     }
 
-
-
     private KeyStroke ctrlKey(char c) {
         if (c < 32) { // possibly ctrl + something?
             char key;
@@ -280,6 +280,33 @@ public class UnixTerminal implements Terminal {
                 return altCtrlKey(chars[0], chars[1]);
             } if (result >= 3) {
                 return SpecialKeyMatcher.match(result, chars);
+            }
+        }
+        return null;
+    }
+
+    private void queryCursorPosition() throws IOException {
+        writeControlSequence("999C".getBytes());
+        writeControlSequence("999B".getBytes());
+        writeControlSequence("6n".getBytes());
+    }
+
+    private CursorPosition readCursorPosition(BufferedReader in) throws IOException {
+        if (in.ready()) {
+            char[] chars = new char[10];
+            int result = in.read(chars, 0, 10);
+            if (result == -1)
+            {
+                return null;
+            }
+            String resultStr = new String(chars).trim();
+            System.out.println(resultStr);
+            Pattern p = Pattern.compile("\\[(\\d+);(\\d+)R");
+            Matcher m = p.matcher(resultStr);
+            if (m.find()) {
+                int rows = Integer.parseInt(m.group(1));
+                int columns = Integer.parseInt(m.group(1));
+                return new CursorPosition(rows, columns);
             }
         }
         return null;
@@ -380,6 +407,7 @@ public class UnixTerminal implements Terminal {
                         case 'Z': kt = KeyType.REVERSE_TAB; break;
                     }
                     if (fChar == 'O') {
+                        // better compatibility with putty (recognizing ctrl + arrows)
                         if (lChar >= 'A' && lChar <= 'D') {
                             puttyCtrl = true;
                         }
@@ -407,7 +435,7 @@ public class UnixTerminal implements Terminal {
 
                 return new KeyStroke(kt, ctrl, alt, shift);
             }
-        return null;
+        return null; // if anything falls through -- we have no idea how to handle it anyway
         }
 
     }
