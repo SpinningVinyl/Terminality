@@ -206,40 +206,111 @@ public class UnixTerminal implements Terminal {
         return lib.isatty(PosixLibC.STDIN_FD) == 1;
     }
 
-    public char read() throws IOException {
+    public KeyStroke read() throws IOException {
         return readChar(input);
     }
 
-    private char readChar(BufferedReader in) throws IOException {
-        if (in.ready()) {
-            int readChar = in.read();
-            return Character.toChars(readChar)[0];
+    private KeyStroke ctrlKey(char c) {
+        if (c < 32) { // possibly ctrl + something?
+            char key;
+            switch (c) {
+                case '\n':   return new KeyStroke(KeyType.LF, false, false);
+                case '\r':   return new KeyStroke(KeyType.CR, false, false);
+                case '\t':   return new KeyStroke(KeyType.TAB, false, false);
+                case 0x08:   return new KeyStroke(KeyType.BACKSPACE, false, false);
+                case '\033': return new KeyStroke(KeyType.ESCAPE, false, false);
+                case 0:      key = ' '; break;
+                case 28:     key = '\\'; break;
+                case 29:     key = ']'; break;
+                case 30:     key = '^'; break;
+                case 31:     key = '_'; break;
+                default:     key = (char) (96 + c);
+            }
+            return new KeyStroke(key, true, false);
         }
-        else return '\u0000';
+        return null;
+    }
+
+    private KeyStroke altCtrlKey(char c1, char c2) {
+        if (c1 == '\033') { // alt + something
+            KeyStroke ks = ctrlKey(c2); // alt + ctrl + something?
+            if (ks != null) {
+                return new KeyStroke(ks.c, ks.type, ks.ctrl, true);
+            } else if (c2 == 0x7f) { // alt + delete
+                return new KeyStroke(KeyType.DELETE, false, true);
+            } // alt + regular key
+            else return new KeyStroke(c2, false, true);
+        }
+        return null;
+    }
+
+    private KeyStroke readChar(BufferedReader in) throws IOException {
+        if (in.ready()) {
+            char[] chars = new char[6];
+            int result = in.read(chars, 0, 4);
+            if (result == -1) {
+                return new KeyStroke(KeyType.EOF, false, false);
+            }
+            if (result == 1) {
+                KeyStroke ks = ctrlKey(chars[0]);
+                if (ks != null) {
+                    return ks;
+                } else if (chars[0] == 0x7f) {
+                    return new KeyStroke(KeyType.DELETE, false, false);
+                }
+                return new KeyStroke(chars[0], false, false);
+            }
+            if (result == 2) {
+                return altCtrlKey(chars[0], chars[1]);
+            } if (result >= 3) {
+                boolean alt = false, ctrl = false, shift = false;
+                if (chars[0] == '\033') {
+                    if (chars[1] == '\033') {
+                        alt = true;
+                    }
+
+                    if (chars[result - 1] != '~') {
+                        switch (chars[result - 1]) {
+                            case 'A': return new KeyStroke(KeyType.ARROW_UP, ctrl, alt);
+                            case 'B': return new KeyStroke(KeyType.ARROW_DOWN, ctrl, alt);
+                            case 'C': return new KeyStroke(KeyType.ARROW_RIGHT, ctrl, alt);
+                            case 'D': return new KeyStroke(KeyType.ARROW_LEFT, ctrl, alt);
+                            case 'H': return new KeyStroke(KeyType.HOME, ctrl, alt);
+                            case 'F': return new KeyStroke(KeyType.END, ctrl, alt);
+                            case 'P': return new KeyStroke(KeyType.F1, ctrl, alt);
+                            case 'Q': return new KeyStroke(KeyType.F2, ctrl, alt);
+                            case 'R': return new KeyStroke(KeyType.F3, ctrl, alt);
+                            case 'S': return new KeyStroke(KeyType.F4, ctrl, alt);
+                            case 'Z': return new KeyStroke(KeyType.REVERSE_TAB, ctrl, alt);
+
+                        }
+                    }
+                    if (chars[1] == '[' || chars[1] == 'O') {
+
+                    }
+                }
+            }
+        }
+        return null;
 
 //        byte[] buf = new byte[4];
 //        int len = 0;
 //        while(true) {
 //            if (len >= buf.length) {
-//                return '\u0000';
+//                return EMPTY_CHAR;
 //            }
 //            int b = in.read();
-//            if (b == -1) return '\u0000';
+//            if (b == -1) return EMPTY_CHAR;
 //            buf[len++] = (byte) b;
 //            char c = decodeChar(len, buf);
-//            if (c != '\u0000') return c;
+//            if (c != EMPTY_CHAR) return c;
 //        }
     }
 
-    private int ctrlKey(int key) {
-        return key & 0x1f;
-    }
+//    public char ctrlKey(char c) {
+//        return (char) (c & 0x1f);
+//    }
 
-    private synchronized char decodeChar(int length, byte... bytes) {
-        CharBuffer out = charset.decode(ByteBuffer.wrap(bytes, 0, length));
-        if (out.position() == 0) return '\u0000';
-        return out.get(0);
-    }
 
 
 }
