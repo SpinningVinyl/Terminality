@@ -4,8 +4,6 @@ import com.sun.jna.LastErrorException;
 import com.sun.jna.Platform;
 
 import java.io.*;
-import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -134,15 +132,13 @@ public class UnixTerminal implements Terminal {
 
     // try to leave the console in a usable state if the process is terminated
     private void registerShutdownHook() {
-        Runtime.getRuntime().addShutdownHook(new Thread() {
-            public void run() {
-                try {
-                    end();
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                end();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
-        });
+        }));
     }
 
     @Override
@@ -270,65 +266,65 @@ public class UnixTerminal implements Terminal {
     }
 
     public static class SpecialKeyMatcher {
-        private final static int STATE0 = 0, STATE1 = 1, STATE2 = 2, STATE3 = 3, STATE4 = 4;
+        private final static int S0 = 0, FCHAR = 1, KEY_ID = 2, MOD_STATE = 3, MATCH = 4;
 
         private static final int CTRL_CODE = 4, ALT_CODE = 2, SHIFT_CODE = 1;
 
         public static KeyStroke match(int len, char... chars) {
 
             boolean ctrl = false, alt = false, shift = false;
-            int state = STATE0;
-            int num1 = 0, num2 = 0;
-            char first = 0, last = 0;
+            int state = S0;
+            int keyID = 0, modState = 0;
+            char fChar = 0, lChar = 0;
             boolean doubleEsc = false;
             for (int charIdx = 0; charIdx < len; charIdx++) {
-                char c = chars[charIdx];
+                char currentChar = chars[charIdx];
                 switch (state) {
-                    case STATE0:
-                        if (c != '\033') {
+                    case S0:
+                        if (currentChar != '\033') {
                             return null;
                         }
-                        state = STATE1;
+                        state = FCHAR;
                         continue;
-                    case STATE1:
-                        if (c == '\033' && !doubleEsc) {
+                    case FCHAR:
+                        if (currentChar == '\033' && !doubleEsc) {
                             doubleEsc = true;
                             continue;
                         }
-                        if (c != '[' && c != 'O') {
+                        if (currentChar != '[' && currentChar != 'O') {
                             return null;
                         }
-                        first = c;
-                        state = STATE2;
+                        fChar = currentChar;
+                        state = KEY_ID;
                         continue;
-                    case STATE2:
-                        if (c == ';') {
-                            state = STATE3;
-                        } else if (Character.isDigit(c)) {
-                            num1 = num1*10 + Character.digit(c, 10);
+                    case KEY_ID:
+                        if (currentChar == ';') {
+                            state = MOD_STATE;
+                        } else if (Character.isDigit(currentChar)) {
+                            keyID = keyID*10 + Character.digit(currentChar, 10);
                         } else {
-                            last = c;
-                            state = STATE4;
+                            lChar = currentChar;
+                            state = MATCH;
                         }
                         continue;
-                    case STATE3:
-                        if (Character.isDigit(c)) {
-                            num2 = num2*10 + Character.digit(c, 10);
+                    case MOD_STATE:
+                        if (Character.isDigit(currentChar)) {
+                            modState = modState*10 + Character.digit(currentChar, 10);
                         } else {
-                            last = c;
-                            state = STATE4;
+                            lChar = currentChar;
+                            state = MATCH;
                         }
                         continue;
-                    case STATE4:
+                    case MATCH:
                         return null;
                 }
             }
-            if (state == STATE4) {
+            if (state == MATCH) {
                 KeyType kt = null;
-                int mods = num2 - 1;
+                int mods = modState - 1;
                 boolean puttyCtrl = false;
-                if (last == '~') {
-                    switch (num1) {
+                if (lChar == '~') {
+                    switch (keyID) {
                         case 1:  kt = KeyType.HOME; break;
                         case 2:  kt = KeyType.INSERT; break;
                         case 3:  kt = KeyType.DELETE; break;
@@ -350,7 +346,7 @@ public class UnixTerminal implements Terminal {
                         case 24: kt = KeyType.F12; break;
                     }
                 } else {
-                    switch (last) {
+                    switch (lChar) {
                         case 'A': kt = KeyType.ARROW_UP; break;
                         case 'B': kt = KeyType.ARROW_DOWN; break;
                         case 'C': kt = KeyType.ARROW_RIGHT; break;
@@ -363,11 +359,11 @@ public class UnixTerminal implements Terminal {
                         case 'S': kt = KeyType.F4; break;
                         case 'Z': kt = KeyType.REVERSE_TAB; break;
                     }
-                    if (first == 'O') {
-                        if (last >= 'A' && last <= 'D') {
+                    if (fChar == 'O') {
+                        if (lChar >= 'A' && lChar <= 'D') {
                             puttyCtrl = true;
                         }
-                        if (last == 'R') {
+                        if (lChar == 'R') {
                             mods = -1;
                         }
                     }
@@ -390,9 +386,7 @@ public class UnixTerminal implements Terminal {
                 }
 
                 return new KeyStroke(kt, ctrl, alt, shift);
-
             }
-
         return null;
         }
 
