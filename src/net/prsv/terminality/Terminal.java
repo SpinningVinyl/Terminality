@@ -8,7 +8,7 @@ public interface Terminal {
      * Returns the size of the terminal window.
      * @return {@code Terminal.WindowSize} object containing size of the terminal window
      */
-    WindowSize getWindowSize() throws IOException;
+    WindowSize getTerminalSize() throws IOException;
 
     /**
      * Saves the original state and puts the terminal into the raw mode.

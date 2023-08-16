@@ -6,8 +6,6 @@ import com.sun.jna.Platform;
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class UnixTerminal implements Terminal {
 
@@ -23,18 +21,33 @@ public class UnixTerminal implements Terminal {
 
     private boolean sizeChange = false;
 
+    private final boolean handleWinch;
+
     private boolean isInitialized = false;
 
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
 
-//  ====================== C O N S T R U C T O R =======================
+//  ===================== C O N S T R U C T O R S ======================
 
     public UnixTerminal() {
-        input = new BufferedReader(new InputStreamReader(System.in));
-        output = new BufferedOutputStream(System.out);
-        charset = DEFAULT_CHARSET;
-        resizeListener = new TerminalResizeListener();
+        this(true);
+    }
+
+    public UnixTerminal(boolean handleSigwinch) {
+        this(System.in, System.out, DEFAULT_CHARSET, handleSigwinch);
+    }
+
+    public UnixTerminal(InputStream in, OutputStream out, Charset charset, boolean handleSigwinch) {
+        input = new BufferedReader(new InputStreamReader(in));
+        output = new BufferedOutputStream(out);
+        this.charset = charset;
+        handleWinch = handleSigwinch;
+        if (handleWinch) {
+            resizeListener = new TerminalResizeListener();
+        } else {
+            resizeListener = null;
+        }
     }
 
 //  ==================== P U B L I C   M E T H O D S ===================
@@ -45,7 +58,9 @@ public class UnixTerminal implements Terminal {
             throw new RuntimeException("Cannot initialize: not a TTY");
         }
         registerShutdownHook();
-        registerResizeListener(resizeListener);
+        if (handleWinch) {
+            registerResizeListener(resizeListener);
+        }
         originalState = getTerminalAttrs();
         PosixLibC.Termios termios = PosixLibC.Termios.copy(originalState);
         termios.c_lflag &= ~(PosixLibC.ECHO | PosixLibC.ICANON | PosixLibC.IEXTEN | PosixLibC.ISIG);
@@ -75,6 +90,7 @@ public class UnixTerminal implements Terminal {
     @Override
     public void setTitle(String title) throws IOException {
         writeControlSequence(("2;" + title + "\007").getBytes());
+        flush();
     }
 
     @Override
@@ -110,27 +126,32 @@ public class UnixTerminal implements Terminal {
         output.flush();
     }
 
+    /**
+     * See {@link Terminal#sizeChanged()}. Only works as intended if {@code UnixTerminal} was instantiated with
+     * {@code handleSigwinch == true}.
+     * @return {@code true} if the size of the terminal window has changed since the last time this method was invoked
+     */
     @Override
     public boolean sizeChanged() {
-        if (sizeChange) {
-            sizeChange = false;
-            return true;
-        }
-        return false;
+        boolean result = sizeChange;
+        sizeChange = false;
+        return result;
     }
 
     @Override
-    public synchronized WindowSize getWindowSize() throws IOException {
+    public WindowSize getTerminalSize() throws RuntimeException {
         final PosixLibC.WinSize winSize = new PosixLibC.WinSize();
-
-        final int returnCode = lib.ioctl(PosixLibC.STDIN_FD,
-                Platform.isMac() ? PosixLibC.TIOCGWINSZ_DARWIN : PosixLibC.TIOCGWINSZ,
-                winSize);
-
-        if (returnCode != 0) {
-            throw new IOException(String.format("ioctl failed with return code[%d]", returnCode));
+        int returnCode;
+        try {
+            returnCode = lib.ioctl(PosixLibC.STDIN_FD,
+                    Platform.isMac() ? PosixLibC.TIOCGWINSZ_DARWIN : PosixLibC.TIOCGWINSZ,
+                    winSize);
+        } catch (LastErrorException e) {
+            returnCode = -1;
         }
-
+        if (returnCode != 0) {
+            throw new RuntimeException("Can't determine windows size");
+        }
         return new WindowSize(winSize.ws_row, winSize.ws_col);
     }
 
@@ -152,6 +173,20 @@ public class UnixTerminal implements Terminal {
             colors = -1;
         }
         return colors;
+    }
+
+    /**
+     * Changes the dimensions of the terminal window to the specified number of rows and columns.
+     * Please be aware that not all terminal emulators support this functionality, and it is advisable to call
+     * {@link #getTerminalSize()} to verify that the terminal has honored the command. Additionally, some terminals
+     * simply change their <em>reported</em> size without actually changing the window dimensions, so probably
+     * just don't use this method.
+     * @param rows the number of rows
+     * @param columns the number of columns
+     * @throws IOException if writing to the output fails for some reason
+     */
+    public void setTerminalSize(int rows, int columns) throws IOException {
+        writeControlSequence(("8;"+rows+';'+columns+'t').getBytes());
     }
 
 //  =================== P R I V A T E   M E T H O D S ==================
@@ -280,38 +315,6 @@ public class UnixTerminal implements Terminal {
                 return altCtrlKey(chars[0], chars[1]);
             } if (result >= 3) {
                 return SpecialKeyMatcher.match(result, chars);
-            }
-        }
-        return null;
-    }
-
-    private void queryTerminalSize() throws IOException {
-        writeControlSequence("999C".getBytes());
-        writeControlSequence("999B".getBytes());
-        writeControlSequence("6n".getBytes());
-    }
-
-    private CursorPosition queryCursorPosition() throws IOException {
-        writeControlSequence("6n".getBytes());
-        return readCursorPosition(input);
-    }
-
-    private CursorPosition readCursorPosition(BufferedReader in) throws IOException {
-        if (in.ready()) {
-            char[] chars = new char[10];
-            int result = in.read(chars, 0, 10);
-            if (result == -1)
-            {
-                return null;
-            }
-            String resultStr = new String(chars).trim();
-            System.out.println(resultStr);
-            Pattern p = Pattern.compile("\\[(\\d+);(\\d+)R");
-            Matcher m = p.matcher(resultStr);
-            if (m.find()) {
-                int rows = Integer.parseInt(m.group(1));
-                int columns = Integer.parseInt(m.group(1));
-                return new CursorPosition(rows, columns);
             }
         }
         return null;
