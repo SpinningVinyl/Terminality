@@ -3,7 +3,6 @@ package net.prsv.terminality;
 import com.sun.jna.LastErrorException;
 import com.sun.jna.Platform;
 
-import java.awt.*;
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -119,6 +118,7 @@ public class UnixTerminal implements Terminal {
         }
     }
 
+    @Override
     public void put(String str, TextRendition... renditions) throws IOException {
         if (str == null) return;
         StringBuilder sb = new StringBuilder();

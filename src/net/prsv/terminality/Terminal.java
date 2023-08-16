@@ -48,6 +48,14 @@ public interface Terminal {
     void put(String str) throws IOException;
 
     /**
+     * Applies one or more text renditions to the specified strings and writes it to the output
+     * stream. See {@link TextRendition}.
+     * @param str string to be written to the output stream
+     * @param renditions text renditions to be applied to the specified string
+     */
+    void put(String str, TextRendition... renditions) throws IOException;
+
+    /**
      * Clears the terminal window.
      */
     void clear() throws IOException;
