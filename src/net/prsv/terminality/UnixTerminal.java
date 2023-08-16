@@ -3,11 +3,14 @@ package net.prsv.terminality;
 import com.sun.jna.LastErrorException;
 import com.sun.jna.Platform;
 
+import java.awt.*;
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
 public class UnixTerminal implements Terminal {
+
+    private static final char ESC = 0x1b;
 
     private static PosixLibC.Termios originalState = new PosixLibC.Termios();
 
@@ -114,6 +117,17 @@ public class UnixTerminal implements Terminal {
         for (int i = 0; i < str.length(); i++) {
             put(str.charAt(i));
         }
+    }
+
+    public void put(String str, TextRendition... renditions) throws IOException {
+        if (str == null) return;
+        StringBuilder sb = new StringBuilder();
+        for (TextRendition rendition : renditions) {
+            sb.append(rendition);
+        }
+        sb.append(str);
+        sb.append(TextRendition.RESET_ALL);
+        put(sb.toString());
     }
 
     @Override
@@ -241,7 +255,7 @@ public class UnixTerminal implements Terminal {
     private void writeControlSequence(byte... bytes) throws IOException {
         if (bytes == null) return;
         byte[] output = new byte[bytes.length + 2];
-        output[0] = (byte) '\033';
+        output[0] = (byte) ESC;
         output[1] = (byte) '[';
         System.arraycopy(bytes, 0, output, 2, bytes.length);
         writeOutput(output);
@@ -269,7 +283,7 @@ public class UnixTerminal implements Terminal {
                 case '\r':   return new KeyStroke(KeyType.CR, false, false);
                 case '\t':   return new KeyStroke(KeyType.TAB, false, false);
                 case 0x08:   return new KeyStroke(KeyType.BACKSPACE, false, false);
-                case '\033': return new KeyStroke(KeyType.ESCAPE, false, false);
+                case ESC: return new KeyStroke(KeyType.ESCAPE, false, false);
                 case 0:      key = ' '; break;
                 case 28:     key = '\\'; break;
                 case 29:     key = ']'; break;
@@ -283,7 +297,7 @@ public class UnixTerminal implements Terminal {
     }
 
     private KeyStroke altCtrlKey(char c1, char c2) {
-        if (c1 == '\033') { // alt + something
+        if (c1 == ESC) { // alt + something
             KeyStroke ks = ctrlKey(c2); // alt + ctrl + something?
             if (ks != null) {
                 return new KeyStroke(ks.c, ks.type, ks.ctrl, true);
@@ -336,13 +350,13 @@ public class UnixTerminal implements Terminal {
                 char currentChar = chars[charIdx];
                 switch (state) {
                     case S0:
-                        if (currentChar != '\033') {
+                        if (currentChar != ESC) {
                             return null;
                         }
                         state = FCHAR;
                         continue;
                     case FCHAR:
-                        if (currentChar == '\033' && !doubleEsc) {
+                        if (currentChar == ESC && !doubleEsc) {
                             doubleEsc = true;
                             continue;
                         }
