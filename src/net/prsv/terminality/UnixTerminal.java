@@ -6,6 +6,7 @@ import com.sun.jna.Platform;
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class UnixTerminal implements Terminal {
 
@@ -29,18 +30,21 @@ public class UnixTerminal implements Terminal {
 
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
+    private final Thread asyncKeyboardReader;
+
+    private final ConcurrentLinkedQueue<KeyStroke> keyQueue;
 
 //  ===================== C O N S T R U C T O R S ======================
 
     public UnixTerminal() {
-        this(true);
+        this(true, false);
     }
 
-    public UnixTerminal(boolean handleSigwinch) {
-        this(System.in, System.out, DEFAULT_CHARSET, handleSigwinch);
+    public UnixTerminal(boolean handleSigwinch, boolean asyncIO) {
+        this(System.in, System.out, DEFAULT_CHARSET, handleSigwinch, asyncIO);
     }
 
-    public UnixTerminal(InputStream in, OutputStream out, Charset charset, boolean handleSigwinch) {
+    public UnixTerminal(InputStream in, OutputStream out, Charset charset, boolean handleSigwinch, boolean asyncIO) {
         input = new BufferedReader(new InputStreamReader(in));
         output = new BufferedOutputStream(out);
         this.charset = charset;
@@ -49,6 +53,27 @@ public class UnixTerminal implements Terminal {
             resizeListener = new TerminalResizeListener();
         } else {
             resizeListener = null;
+        }
+        if (asyncIO) {
+            keyQueue = new ConcurrentLinkedQueue<>();
+            asyncKeyboardReader = new Thread(() -> {
+                try {
+                    while (!Thread.interrupted()) {
+                        KeyStroke ks = readKeyStroke(input, false);
+                        if (ks != null) {
+                            keyQueue.add(ks);
+                        }
+                        Thread.sleep(4);
+                    }
+                } catch (IOException | InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            asyncKeyboardReader.setDaemon(true);
+            asyncKeyboardReader.start();
+        } else {
+            keyQueue = null;
+            asyncKeyboardReader = null;
         }
     }
 
@@ -65,10 +90,13 @@ public class UnixTerminal implements Terminal {
         }
         originalState = getTerminalAttrs();
         PosixLibC.Termios termios = PosixLibC.Termios.copy(originalState);
-        termios.c_lflag &= ~(PosixLibC.ECHO | PosixLibC.ICANON | PosixLibC.IEXTEN | PosixLibC.ISIG);
-        termios.c_iflag &= ~(PosixLibC.IXON | PosixLibC.ICRNL);
+        termios.c_lflag &= ~(PosixLibC.ECHO | PosixLibC.ECHONL | ~PosixLibC.IEXTEN | PosixLibC.ICANON | PosixLibC.ISIG);
+        termios.c_iflag &= ~(PosixLibC.IXON | PosixLibC.IXANY | PosixLibC.ICRNL | PosixLibC.ISTRIP);
         termios.c_oflag &= ~(PosixLibC.OPOST);
+        termios.c_cc[PosixLibC.VMIN] = 0;
+        termios.c_cc[PosixLibC.VTIME] = 0;
         setTerminalAttrs(termios);
+//        writeControlSequence("?1049h".getBytes());
         isInitialized = true;
     }
 
@@ -82,11 +110,15 @@ public class UnixTerminal implements Terminal {
         isInitialized = false;
     }
 
-    public KeyStroke read() throws IOException, RuntimeException {
+    @Override
+    public KeyStroke readKey(boolean blocking) throws IOException, RuntimeException {
         if (!isInitialized) {
             throw new RuntimeException("The terminal is not initialized");
         }
-        return readChar(input);
+        if (keyQueue != null) {
+            return keyQueue.poll();
+        }
+        return readKeyStroke(input, blocking);
     }
 
     @Override
@@ -309,8 +341,8 @@ public class UnixTerminal implements Terminal {
         return null;
     }
 
-    private KeyStroke readChar(BufferedReader in) throws IOException {
-        if (in.ready()) {
+    private synchronized KeyStroke readKeyStroke(BufferedReader in, boolean blocking) throws IOException {
+        if (in.ready() || blocking) {
             char[] chars = new char[7];
             int result = in.read(chars, 0, 7);
             if (result == -1) {
@@ -327,7 +359,8 @@ public class UnixTerminal implements Terminal {
             }
             if (result == 2) {
                 return altCtrlKey(chars[0], chars[1]);
-            } if (result >= 3) {
+            }
+            if (result >= 3) {
                 return SpecialKeyMatcher.match(result, chars);
             }
         }
