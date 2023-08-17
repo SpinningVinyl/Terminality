@@ -35,6 +35,8 @@ public interface Terminal {
      */
     void setCursorPosition(int row, int column) throws IOException;
 
+    KeyStroke readKey(boolean blocking) throws IOException;
+
     /**
      * Outputs a single character to the output stream.
      * @param c character to be written to the output stream
