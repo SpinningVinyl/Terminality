@@ -1,0 +1,5 @@
+Binary distributions of Terminality include the JNA library.
+
+https://github.com/java-native-access/jna
+
+JNA is licensed under the Apache License, Version 2.0. 

@@ -1,3 +1,19 @@
+/*
+ * This file is part of Terminality: https://github.com/SpinningVinyl/Terminality
+ *  Copyright 2023 Pavel Urusov
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package net.prsv.terminality;
 
 import com.sun.jna.LastErrorException;
@@ -62,11 +78,11 @@ public class UnixTerminal implements Terminal {
             asyncKeyboardReader = new Thread(() -> {
                 try {
                     while (!Thread.interrupted()) {
-                        KeyStroke ks = readKeyStroke(input, false);
+                        KeyStroke ks = readKeyStroke(input, false); // non-blocking, obviously
                         if (ks != null) {
                             keyQueue.add(ks);
                         }
-                        Thread.sleep(4);
+                        Thread.sleep(5); // poll the keyboard input 200 times a second
                     }
                 } catch (IOException | InterruptedException e) {
                     throw new RuntimeException(e);
@@ -122,7 +138,7 @@ public class UnixTerminal implements Terminal {
         if (!isInitialized) {
             throw new RuntimeException("The terminal is not initialized");
         }
-        if (keyQueue != null) {
+        if (keyQueue != null) { // async IO mode -- return a KeyStroke from the queue
             return keyQueue.poll();
         }
         return readKeyStroke(input, blocking);
@@ -278,8 +294,12 @@ public class UnixTerminal implements Terminal {
 
     // register a Runnable that will be invoked whenever the app receives signal 28 (SIGWINCH)
     private void registerResizeListener(final Runnable r) throws IOException {
-        /* first try to register the listener using the sun.misc.Signal API,
-           if it fails -- use the native interface defined in PosixLibC
+        /* First try to register the listener using the sun.misc.Signal API,
+           if it fails -- use the native interface defined in PosixLibC.
+           I have found that the listener attached using the native interface
+           just randomly stops firing sometimes, sun.misc.Signal seems to be
+           a bit more reliable (as it should be because the JVM uses it to
+           process the signals itself)
          */
         try {
             Class<?> signalClass = Class.forName("sun.misc.Signal");
@@ -399,6 +419,9 @@ public class UnixTerminal implements Terminal {
         return null;
     }
 
+    /*
+    This is basically a DFA that implements string matching for ESC-sequences.
+     */
     private static class SpecialKeyMatcher {
         private final static int S0 = 0, FCHAR = 1, KEY_ID = 2, MOD_STATE = 3, MATCH = 4;
 
