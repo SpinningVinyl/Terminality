@@ -4,9 +4,12 @@ import com.sun.jna.LastErrorException;
 import com.sun.jna.Platform;
 
 import java.io.*;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class UnixTerminal implements Terminal {
 
@@ -22,7 +25,7 @@ public class UnixTerminal implements Terminal {
 
     private final TerminalResizeListener resizeListener;
 
-    private boolean sizeChange = false;
+    private final AtomicBoolean sizeChange = new AtomicBoolean(true);
 
     private final boolean handleWinch;
 
@@ -90,9 +93,11 @@ public class UnixTerminal implements Terminal {
         }
         originalState = getTerminalAttrs();
         PosixLibC.Termios termios = PosixLibC.Termios.copy(originalState);
+        // enable the raw mode
         termios.c_lflag &= ~(PosixLibC.ECHO | PosixLibC.ECHONL | ~PosixLibC.IEXTEN | PosixLibC.ICANON | PosixLibC.ISIG);
         termios.c_iflag &= ~(PosixLibC.IXON | PosixLibC.IXANY | PosixLibC.ICRNL | PosixLibC.ISTRIP);
         termios.c_oflag &= ~(PosixLibC.OPOST);
+        // don't wait for timeout or for the keyboard buffer to fill up -- send the changes immediately
         termios.c_cc[PosixLibC.VMIN] = 0;
         termios.c_cc[PosixLibC.VTIME] = 0;
         setTerminalAttrs(termios);
@@ -102,11 +107,12 @@ public class UnixTerminal implements Terminal {
 
     @Override
     public void end() throws IOException {
+        writeControlSequence(TextRendition.RESET_ALL.toString().getBytes()); // reset FG and BG color
         clear();
         setCursorVisibility(true);
         writeControlSequence((byte) 'H'); // reset the cursor position
         flush();
-        setTerminalAttrs(originalState);
+        setTerminalAttrs(originalState); // restore original terminal settings
         isInitialized = false;
     }
 
@@ -179,8 +185,8 @@ public class UnixTerminal implements Terminal {
      */
     @Override
     public boolean sizeChanged() {
-        boolean result = sizeChange;
-        sizeChange = false;
+        boolean result = sizeChange.getAcquire();
+        sizeChange.set(false);
         return result;
     }
 
@@ -263,13 +269,32 @@ public class UnixTerminal implements Terminal {
         }
     }
 
-    // register a Runnable that will be invoked whenever the app receives the signal 28 (SIGWINCH)
-    private void registerResizeListener(final Runnable runnable) throws IOException {
-        lib.signal(PosixLibC.SIGWINCH, new PosixLibC.sig_t() {
-            public synchronized void invoke(int signal) {
-                runnable.run();
+    // register a Runnable that will be invoked whenever the app receives signal 28 (SIGWINCH)
+    private void registerResizeListener(final Runnable r) throws IOException {
+        /* first try to register the listener using the sun.misc.Signal API,
+           if it fails -- use the native interface defined in PosixLibC
+         */
+        try {
+            Class<?> signalClass = Class.forName("sun.misc.Signal");
+            for (Method signalClassMethod : signalClass.getDeclaredMethods()) {
+                if (signalClassMethod.getName().equals("handle")) {
+                    Object resizeHandler = Proxy.newProxyInstance(getClass().getClassLoader(),
+                            new Class[]{Class.forName("sun.misc.SignalHandler")}, (proxy, method, args) -> {
+                                if(method.getName().equals("handle")) {
+                                    r.run();
+                                }
+                                return null;
+                            });
+                    signalClassMethod.invoke(null, signalClass.getConstructor(String.class).newInstance("WINCH"), resizeHandler);
+                }
             }
-        });
+        } catch (Exception e) {
+            lib.signal(PosixLibC.SIGWINCH, new PosixLibC.sig_t() {
+                public synchronized void invoke(int signal) {
+                    r.run();
+                }
+            });
+        }
     }
 
 
@@ -497,7 +522,7 @@ public class UnixTerminal implements Terminal {
 
     private class TerminalResizeListener implements Runnable {
         public void run() {
-            sizeChange = true;
+            sizeChange.setRelease(false);
         }
     }
 
