@@ -16,6 +16,7 @@
  */
 package net.prsv.terminality;
 
+@SuppressWarnings("unused")
 public class TextRendition {
 
     private static final char ESC = 0x1b;

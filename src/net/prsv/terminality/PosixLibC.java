@@ -20,6 +20,7 @@ import com.sun.jna.*;
 
 import java.util.Arrays;
 
+@SuppressWarnings("unused")
 public interface PosixLibC extends Library {
 
     // file descriptors
