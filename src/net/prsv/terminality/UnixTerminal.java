@@ -169,6 +169,12 @@ public class UnixTerminal implements Terminal {
     }
 
     @Override
+    public void put(int row, int column, String str, TextRendition... renditions) throws IOException {
+        setCursorPosition(row, column);
+        put(str, renditions);
+    }
+
+    @Override
     public void clear() throws IOException {
         writeControlSequence((byte) '2', (byte) 'J');
     }

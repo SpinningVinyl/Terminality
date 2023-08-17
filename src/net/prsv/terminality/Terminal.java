@@ -50,12 +50,22 @@ public interface Terminal {
     void put(String str) throws IOException;
 
     /**
-     * Applies one or more text renditions to the specified strings and writes it to the output
+     * Applies one or more text renditions to the specified string and writes it to the output
      * stream. See {@link TextRendition}.
      * @param str string to be written to the output stream
      * @param renditions text renditions to be applied to the specified string
      */
     void put(String str, TextRendition... renditions) throws IOException;
+
+    /**
+     * Moves the cursor to the specified location, applies one or more text renditions to the specified string
+     * and writes it to the output stream. See {@link TextRendition}.
+     * @param row vertical coordinate of the cursor
+     * @param column horizontal coordinate of the cursor
+     * @param str string to be written to the output stream
+     * @param renditions text renditions to be applied to the specified string
+     */
+    void put(int row, int column, String str, TextRendition... renditions) throws IOException;
 
     /**
      * Clears the terminal window.
