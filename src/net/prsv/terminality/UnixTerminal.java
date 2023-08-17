@@ -97,11 +97,12 @@ public class UnixTerminal implements Terminal {
         termios.c_lflag &= ~(PosixLibC.ECHO | PosixLibC.ECHONL | ~PosixLibC.IEXTEN | PosixLibC.ICANON | PosixLibC.ISIG);
         termios.c_iflag &= ~(PosixLibC.IXON | PosixLibC.IXANY | PosixLibC.ICRNL | PosixLibC.ISTRIP);
         termios.c_oflag &= ~(PosixLibC.OPOST);
-        // don't wait for timeout or for the keyboard buffer to fill up -- send the changes immediately
+        /* don't wait for timeout or for the keyboard buffer to fill up -- send the changes immediately
+        (not usually required hence commented out. I'm a bit leery of touching this part of the struct because of
+        possible segfaults depending on the host platform.)
         termios.c_cc[PosixLibC.VMIN] = 0;
-        termios.c_cc[PosixLibC.VTIME] = 0;
+        termios.c_cc[PosixLibC.VTIME] = 0; */
         setTerminalAttrs(termios);
-//        writeControlSequence("?1049h".getBytes());
         isInitialized = true;
     }
 
