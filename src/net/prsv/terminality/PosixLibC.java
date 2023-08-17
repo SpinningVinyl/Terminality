@@ -7,11 +7,28 @@ import java.util.Arrays;
 public interface PosixLibC extends Library {
 
     // file descriptors
-    int STDIN_FD = 0;
-    int STDOUT_FD = 1;
-    int ISIG = 1, ICANON = 2, ECHO = 10, TCSAFLUSH = 2, TCSANOW = 0,
-            IXON = 2000, ICRNL = 400, IEXTEN = 100000, OPOST = 1, VMIN = 6, VTIME = 5,
-            TIOCGWINSZ  = 0x5413, TIOCGWINSZ_DARWIN = 0x40087468; // ioctl constants
+    int STDIN_FD    = 0;
+    int STDOUT_FD   = 1;
+
+    // constants for tcsetattr()
+    int ISIG        = 1;  // signals
+    int ICANON      = 2;  // canonical mode
+    int ECHO        = 8;  // echo
+    int ECHONL      = 64; // echo the NL character
+    int TCSAFLUSH   = 2;  // apply the changes the next time output is flushed
+    int TCSANOW     = 0; // apply the changes immediately
+    int ISTRIP      = 0x020; // strip off 8th bit on input
+    int IXON        = 1024;  // enable/disable flow control on input
+    int IXANY       = 2048;  // use any character to re-enable input if stopped
+    int ICRNL       = 256;   // replace CR with NL on input
+    int IEXTEN      = 0x08000; // enable implementation-defined input processing
+    int OPOST       = 1; // enable implementation-defined output processing
+    int VMIN        = 6; // c_cc[VMIN] sets the minimum number of character for non-canonical read
+    int VTIME       = 5; // c_cc[VTIME] sets timeout (in 0.1s units) for non-canonical read
+
+    // ioctl constants
+    int TIOCGWINSZ  = 0x5413;
+    int TIOCGWINSZ_DARWIN = 0x40087468;
 
     // different platforms require different values of NCSS
     int NCSS = Platform.isMac() ? 20 : 32;
