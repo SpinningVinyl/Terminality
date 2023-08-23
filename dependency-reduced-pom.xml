@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>net.prsv.terminality</groupId>
+  <artifactId>terminality</artifactId>
+  <name>Terminality</name>
+  <version>0.4c</version>
+  <description>A simple Java library for working with the Linux terminal.</description>
+  <url>https://github.com/SpinningVinyl/Terminality</url>
+  <developers>
+    <developer>
+      <name>Pavel Urusov</name>
+      <email>pavel.urusov@gmail.com</email>
+    </developer>
+  </developers>
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>http://www.opensource.org/licenses/mit-license.php</url>
+    </license>
+  </licenses>
+  <scm>
+    <connection>scm:git:git://github.com/SpinningVinyl/Terminality.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com:SpinningVinyl/Terminality.git</developerConnection>
+    <url>https://github.com/SpinningVinyl/Terminality</url>
+  </scm>
+  <build>
+    <plugins>
+      <plugin>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.5.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <transformers>
+            <transformer>
+              <addHeader>false</addHeader>
+            </transformer>
+            <transformer />
+          </transformers>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+  <properties>
+    <maven.compiler.target>11</maven.compiler.target>
+    <maven.compiler.source>11</maven.compiler.source>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+</project>
