@@ -4,7 +4,7 @@
   <groupId>net.prsv.terminality</groupId>
   <artifactId>terminality</artifactId>
   <name>Terminality</name>
-  <version>0.4c</version>
+  <version>0.4d</version>
   <description>A simple Java library for working with the Linux terminal.</description>
   <url>https://github.com/SpinningVinyl/Terminality</url>
   <developers>
