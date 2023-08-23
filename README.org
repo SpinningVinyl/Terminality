@@ -4,6 +4,8 @@ This is a very simple Java library for working with the Linux terminal. It allow
 
 [[./screencast.gif]]
 
+(Flickering is an artifact of the screen capturing process.)
+
 ** Features
 Terminality is designed to allow basic terminal manipulation: moving the cursor around, setting the color of text and background, and non-blocking reading of keyboard input.
 
