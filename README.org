@@ -1,0 +1,109 @@
+* Terminality
+
+This is a very simple Java library for working with the Linux terminal. It allows client applications to do something like this, for example:
+
+[[./screencast.gif]]
+
+** Features
+Terminality is designed to allow basic terminal manipulation: moving the cursor around, setting the color of text and background, and non-blocking reading of keyboard input.
+
+** How does it work?
+Terminality uses [[https://github.com/java-native-access/jna][JNA]] to call native ~libc~ functions on Posix-compatible systems. These functions are called to switch the terminal into the so-called “raw mode” (see [[https://www.gnu.org/software/libc/manual/html_node/Low_002dLevel-Terminal-Interface.html][Low-level Terminal Interface]]). After the terminal is set up as required, the library uses [[https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797][ANSI Escape sequences]] to control the output.
+
+To initialise the terminal:
+
+#+begin_src java
+UnixTerminal t = new UnixTerminal();
+t.begin(); // enter the raw mode
+#+end_src
+
+To exit the raw mode and restore the original attributes of the terminal:
+#+begin_src java
+t.end();
+#+end_src
+
+Even if your program terminates unexpectedly, Terminality will try to leave the terminal in a usable state by using a shutdown hook.
+
+** Keyboard input
+To read the keyboard, use the ~readKey()~ method. The method returns an object of the ~KeyStroke~ class. It contains the type of the key (see ~KeyType.java~), the character (if ~ks.type == KeyType.CHARACTER~) and the status of the modifier keys (~ks.ctrl~, ~ks.alt~ and ~ks.shift~). The ~shift~ field is useful only when the user presses special keys (e.g. [Ctrl]+[Shift]+[F5]), otherwise it would always be ~false~. The library tries to do its best to guess when the [Ctrl] key is used, but due to the nature of the Unix terminal it's not always possible (for example, there is literally no way to tell whether the user has pressed [Ctrl]+[h] or [Backspace]; this also applies to several other key combinations).
+
+The library supports three modes for reading keyboard input: blocking, non-blocking and asynchronous.
+
+Blocking keyboard I/O is useful when your program simply reacts to user input and does nothing in the background. To use it:
+
+#+begin_src java
+KeyStroke ks = t.readKey(true);
+#+end_src
+
+Conversely, calling ~readKey(false)~ or without any parameters reads the keyboard in the non-blocking manner.
+
+To use asynchrous keyboard input, intantiate the terminal object with the ~asyncIO~ parameter set to ~true~. Asynchronous input is always non-blocking.
+
+** Controlling the cursor
+Use the ~setCursorVisibility()~ method to control the visibility of the cursor:
+
+#+begin_src java
+t.setCursorVisibility(false); // make the cursor invisible
+#+end_src
+
+To move the cursor around, use the ~setCursorPosition()~ method. Row and column indices are zero-based:
+
+#+begin_src java
+t.setCursorPosition(9, 4); // move the cursor to 10-th row and 5-th column
+#+end_src
+
+** Setting text attributes (color, etc.)
+Use the ~setTextRendition()~ and ~resetTextRendition()~ methods to change text attributes such as color, background color etc. The most common text and background colors are provided as constants in the ~TextRendition~ class. See ~TextRendition.java~ for more information. 
+
+** Printing text
+To print text, use the ~put()~ method.
+
+#+begin_src java
+t.put('a'); // outputs single character -- 'a'
+#+end_src
+
+#+begin_src java
+t.put("Hello, world!"); // outputs the string "Hello, world!"
+#+end_src
+
+There are also convenience methods that allow the client to specify text position and text attributes.
+
+#+begin_src java
+t.put("text", TextRendition.FG_WHITE_INTENSE);
+#+end_src
+
+is the same as calling
+
+#+begin_src java
+t.setTextRendition(TextRendition.FG_WHITE_INTENSE);
+t.put("text");
+t.resetTextRendition();
+#+end_src
+
+And
+
+#+begin_src java
+t.put(row, column, "text", TextRendition.FG_WHITE_INTENSE, TextRendition.BG_PURPLE);
+#+end_src
+
+is the same as calling
+
+#+begin_src java
+t.setCursorPosition(row, column);
+t.setTextRendition(TextRendition.FG_WHITE_INTENSE, TextRendition.BG_PURPLE);
+t.put("text");
+t.resetTextRendition();
+#+end_src
+
+** Terminal size
+Use the ~getTerminalSize()~ method to get the size of the terminal window:
+
+#+begin_src java
+Terminal.WindowSize ws = t.getTerminalSize();
+int cols = ws.columns;
+int rows = ws.rows;
+#+end_src
+
+When you create a new ~UnixTerminal~ object, by default the constructor tries to register a handler for the SIGWINCH signal (the OS sends this signal to an app when the size of the terminal window changes). If the terminal is handling SIGWINCH itself, you can query whether the size of the terminal has changed using the ~sizeChanged()~ method. Subsequent calls to this method will return ~false~ until the terminal window is resized again.
+
+You can disable this functionality by calling the constructor with the ~handleSigwinch~ parameter set to ~false~ (for example, if you want to implement your own handler using the unsupported ~sun.misc.Signal~ API). Alternatively, you can simply call ~getTerminalSize()~ on every iteration of your main application loop.  
