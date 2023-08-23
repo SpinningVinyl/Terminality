@@ -13,7 +13,7 @@ Terminality is designed to allow basic terminal manipulation: moving the cursor 
 I wanted to create terminal applications that could do more than simply print text at the current cursor position and read keyboard input line by line. Unfortunately, this is not possible using the Java Class Library. There is [[https://github.com/mabe02/lanterna][Lanterna]] which is an absolutely fantastic piece of software, but it comes with a lot of features that I don't want or need (such as the built-in Swing terminal emulator, an UI library similar to ~ncurses~, Windows support etc.). Hence this project.
 
 ** Compatibility
-The library has been extensively tested on Linux using a variety of terminal emulators (xterm, urxvt, kitty, Konsole and Gnome Terminal). It is supposed to be compatible with macOS, but I have not tested it. It should work in WSL2, but I have not tested it for compatibility with the Windows Terminal.  
+The library has been extensively tested on Linux (with GNU C Library) using a variety of terminal emulators (xterm, urxvt, kitty, Konsole and Gnome Terminal). It is supposed to be compatible with macOS, but I have not tested it. It should work in WSL2, but I have not tested it for compatibility with the Windows Terminal. I have not tested Terminality with alternative libc implementations, e.g. ~musl~.
 
 ** How does it work?
 Terminality uses [[https://github.com/java-native-access/jna][JNA]] to call native ~libc~ functions on Posix-compatible systems. These functions are called to switch the terminal into the so-called “raw mode” (see [[https://www.gnu.org/software/libc/manual/html_node/Low_002dLevel-Terminal-Interface.html][Low-level Terminal Interface]]). After the terminal is set up as required, the library uses [[https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797][ANSI Escape sequences]] to control the output.
@@ -43,7 +43,7 @@ Blocking keyboard I/O is useful when your program simply reacts to user input an
 KeyStroke ks = t.readKey(true);
 #+end_src
 
-Conversely, calling ~readKey(false)~ or without any parameters reads the keyboard in the non-blocking manner.
+Conversely, calling ~readKey(false)~ or without any parameters reads the keyboard in the non-blocking manner. In this case, the method returns ~null~ if the user has not pressed any keys.
 
 To use asynchronous keyboard input, instantiate the terminal object with the ~asyncIO~ parameter set to ~true~. Asynchronous input is always non-blocking.
 
