@@ -89,13 +89,11 @@ public interface Terminal {
      * to reset text color and attributes to defaults. Take note that using {@link #put(String, TextRendition...)}
      * and {@link #put(int, int, String, TextRendition...)} will also reset text color and attributes.
      * @param renditions text renditions to be applied
-     * @throws IOException
      */
     void setTextRendition(TextRendition... renditions) throws IOException;
 
     /**
      * Resets text color and other attributes to their defaults.
-     * @throws IOException
      */
     void resetTextRendition() throws IOException;
 
