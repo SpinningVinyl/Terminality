@@ -103,6 +103,13 @@ t.put("text");
 t.resetTextRendition();
 #+end_src
 
+** Flushing the buffer
+All output operations in Terminality are buffered, the client has to call ~flush()~ to make any changes visible:
+
+#+begin_src java
+t.flush(); // flush the output buffer
+#+end_src
+
 ** Terminal size
 Use the ~getTerminalSize()~ method to get the size of the terminal window:
 
