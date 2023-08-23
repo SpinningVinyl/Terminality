@@ -69,7 +69,7 @@ public class BouncyBall {
                     quit = true;
                 }
             }
-            // wait for 25ms until the next frame
+            // wait 25ms until the next frame
             Thread.sleep(25);
         }
 
