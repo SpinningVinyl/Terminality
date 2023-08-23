@@ -134,6 +134,11 @@ public class UnixTerminal implements Terminal {
     }
 
     @Override
+    public KeyStroke readKey() throws IOException, RuntimeException {
+        return readKey(false);
+    }
+
+    @Override
     public KeyStroke readKey(boolean blocking) throws IOException, RuntimeException {
         if (!isInitialized) {
             throw new RuntimeException("The terminal is not initialized");
