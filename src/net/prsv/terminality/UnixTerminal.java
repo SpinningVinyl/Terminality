@@ -161,6 +161,23 @@ public class UnixTerminal implements Terminal {
     }
 
     @Override
+    public void setTextRendition(TextRendition... renditions) throws IOException {
+        if (renditions == null) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (TextRendition rendition : renditions) {
+            sb.append(rendition);
+        }
+        put(sb.toString());
+    }
+
+    @Override
+    public void resetTextRendition() throws IOException {
+        setTextRendition(TextRendition.RESET_ALL);
+    }
+
+    @Override
     public void put(char c) throws IOException {
         writeOutput(convertCharset(c));
     }
@@ -176,13 +193,9 @@ public class UnixTerminal implements Terminal {
     @Override
     public void put(String str, TextRendition... renditions) throws IOException {
         if (str == null) return;
-        StringBuilder sb = new StringBuilder();
-        for (TextRendition rendition : renditions) {
-            sb.append(rendition);
-        }
-        sb.append(str);
-        sb.append(TextRendition.RESET_ALL);
-        put(sb.toString());
+        setTextRendition(renditions);
+        put(str);
+        resetTextRendition();
     }
 
     @Override

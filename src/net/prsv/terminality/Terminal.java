@@ -84,6 +84,22 @@ public interface Terminal {
     void put(int row, int column, String str, TextRendition... renditions) throws IOException;
 
     /**
+     * Sets the specified text rendition(s). After this command, all text printed using {@link #put(char)}
+     * and {@link #put(String)} will have the specified text renditions applied to it. Use {@link #resetTextRendition()}
+     * to reset text color and attributes to defaults. Take note that using {@link #put(String, TextRendition...)}
+     * and {@link #put(int, int, String, TextRendition...)} will also reset text color and attributes.
+     * @param renditions text renditions to be applied
+     * @throws IOException
+     */
+    void setTextRendition(TextRendition... renditions) throws IOException;
+
+    /**
+     * Resets text color and other attributes to their defaults.
+     * @throws IOException
+     */
+    void resetTextRendition() throws IOException;
+
+    /**
      * Clears the terminal window.
      */
     void clear() throws IOException;
