@@ -9,6 +9,9 @@ This is a very simple Java library for working with the Linux terminal. It allow
 ** Features
 Terminality is designed to allow basic terminal manipulation: moving the cursor around, setting the color of text and background, and non-blocking reading of keyboard input.
 
+** Why did you write it?
+I wanted to create terminal applications that could do more than simply print text at the current cursor position and read keyboard input line by line. Unfortunately, this is not possible using the Java Class Library. There is [[https://github.com/mabe02/lanterna][Lanterna]] which is an absoutely fantastic piece of software, but it comes with a lot of features that I don't want or need (such as the built-in Swing terminal emulator, an UI library similar to ~ncurses~, Windows support etc.). Hence this project. 
+
 ** How does it work?
 Terminality uses [[https://github.com/java-native-access/jna][JNA]] to call native ~libc~ functions on Posix-compatible systems. These functions are called to switch the terminal into the so-called “raw mode” (see [[https://www.gnu.org/software/libc/manual/html_node/Low_002dLevel-Terminal-Interface.html][Low-level Terminal Interface]]). After the terminal is set up as required, the library uses [[https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797][ANSI Escape sequences]] to control the output.
 
