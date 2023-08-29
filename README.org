@@ -110,6 +110,13 @@ All output operations in Terminality are buffered, the client has to call ~flush
 t.flush(); // flush the output buffer
 #+end_src
 
+** Chaining the method calls
+Since version 0.5, Terminality supports the Builder pattern, which means that you can chain calls to some methods, e.g.:
+
+#+begin_src java
+t.begin().clear().setCursorVisibility(false).setCursorPosition(5, 5).put("Hello!").flush();
+#+end_src
+
 ** Terminal size
 Use the ~getTerminalSize()~ method to get the size of the terminal window:
 
