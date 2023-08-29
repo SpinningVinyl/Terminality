@@ -6,7 +6,7 @@
 
     <groupId>net.prsv.terminality</groupId>
     <artifactId>terminality</artifactId>
-    <version>0.4d</version>
+    <version>0.4e</version>
 
     <name>Terminality</name>
     <description> A simple Java library for working with the Linux terminal.</description>
