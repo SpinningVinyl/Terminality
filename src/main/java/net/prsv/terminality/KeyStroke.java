@@ -20,6 +20,16 @@ public class KeyStroke {
         this.type = keyType;
     }
 
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Type: ").append(type.name()).append(", ");
+        if (type ==KeyType.CHARACTER) {
+            sb.append("character: '").append(c).append("', ");
+        }
+        sb.append("Ctrl: ").append(ctrl).append(", ").append("Alt: ").append(alt).append(", ").append("Shift: ").append(shift);
+        return sb.toString();
+    }
+
     public KeyStroke(KeyType keyType, boolean ctrl, boolean alt, boolean shift) {
         this('\u0000', keyType, ctrl, alt, shift);
     }
