@@ -31,7 +31,7 @@ public interface Terminal {
      * Saves the original state and puts the terminal into the raw mode.
      * @throws IOException if there is an error calling native functions
      */
-    void begin() throws IOException;
+    Terminal begin() throws IOException;
 
 
     /**
@@ -39,7 +39,7 @@ public interface Terminal {
      * @param b if {@code true}, the cursor visibility is set to off.
      * @throws IOException if there is an error writing to stdout
      */
-    void setCursorVisibility(boolean b) throws IOException;
+    Terminal setCursorVisibility(boolean b) throws IOException;
 
     /**
      * Restores the original state of the terminal.
@@ -52,7 +52,7 @@ public interface Terminal {
      * @param title Title to be set
      * @throws IOException if there is an error writing to stdout
      */
-    void setTitle(String title) throws IOException;
+    Terminal setTitle(String title) throws IOException;
 
     /**
      * Moves the cursor to the specified position.
@@ -60,7 +60,7 @@ public interface Terminal {
      * @param column horizontal coordinate of the cursor
      * @throws IOException if there is an error writing to stdout
      */
-    void setCursorPosition(int row, int column) throws IOException;
+    Terminal setCursorPosition(int row, int column) throws IOException;
 
     /**
      * Reads one key-press (non-blocking).
@@ -86,14 +86,14 @@ public interface Terminal {
      * @param c character to be written to the output stream
      * @throws IOException if there is an error writing to stdout
      */
-    void put(char c) throws IOException;
+    Terminal put(char c) throws IOException;
 
     /**
      * Outputs a string to the output stream.
      * @param str string to be written to the output stream
      * @throws IOException if there is an error writing to stdout
      */
-    void put(String str) throws IOException;
+    Terminal put(String str) throws IOException;
 
     /**
      * Applies one or more text renditions to the specified string and writes it to the output
@@ -102,7 +102,7 @@ public interface Terminal {
      * @param renditions text renditions to be applied to the specified string
      * @throws IOException if there is an error writing to stdout
      */
-    void put(String str, TextRendition... renditions) throws IOException;
+    Terminal put(String str, TextRendition... renditions) throws IOException;
 
     /**
      * Moves the cursor to the specified location, applies one or more text renditions to the specified string
@@ -113,7 +113,7 @@ public interface Terminal {
      * @param renditions text renditions to be applied to the specified string
      * @throws IOException if there is an error writing to stdout
      */
-    void put(int row, int column, String str, TextRendition... renditions) throws IOException;
+    Terminal put(int row, int column, String str, TextRendition... renditions) throws IOException;
 
     /**
      * Sets the specified text rendition(s). After this command, all text printed using {@link #put(char)}
@@ -123,25 +123,25 @@ public interface Terminal {
      * @param renditions text renditions to be applied
      * @throws IOException if there is an error writing to stdout
      */
-    void setTextRendition(TextRendition... renditions) throws IOException;
+    Terminal setTextRendition(TextRendition... renditions) throws IOException;
 
     /**
      * Resets text color and other attributes to their defaults.
      * @throws IOException if there is an error writing to stdout
      */
-    void resetTextRendition() throws IOException;
+    Terminal resetTextRendition() throws IOException;
 
     /**
      * Clears the terminal window.
      * @throws IOException if there is an error writing to stdout
      */
-    void clear() throws IOException;
+    Terminal clear() throws IOException;
 
     /**
      * Flushes the output stream.
      * @throws IOException if there is an error writing to stdout
      */
-    void flush() throws IOException;
+    Terminal flush() throws IOException;
 
     /**
      * Checks whether the terminal supports color output.

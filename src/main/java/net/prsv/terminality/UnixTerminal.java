@@ -99,7 +99,7 @@ public class UnixTerminal implements Terminal {
 //  ==================== P U B L I C   M E T H O D S ===================
 
     @Override
-    public synchronized void begin() throws IOException, RuntimeException {
+    public synchronized UnixTerminal begin() throws IOException, RuntimeException {
         if (!isTTY()) {
             throw new RuntimeException("Cannot initialize: not a TTY");
         }
@@ -120,6 +120,7 @@ public class UnixTerminal implements Terminal {
         termios.c_cc[PosixLibC.VTIME] = 0; */
         setTerminalAttrs(termios);
         isInitialized = true;
+        return this;
     }
 
     @Override
@@ -150,73 +151,83 @@ public class UnixTerminal implements Terminal {
     }
 
     @Override
-    public void setTitle(String title) throws IOException {
+    public UnixTerminal setTitle(String title) throws IOException {
         writeControlSequence(("2;" + title + "\007").getBytes());
         flush();
+        return this;
     }
 
     @Override
-    public void setCursorPosition(int row, int column) throws IOException {
+    public UnixTerminal setCursorPosition(int row, int column) throws IOException {
         writeControlSequence(((row + 1) + ";" + (column + 1) + "H").getBytes());
+        return this;
     }
 
     @Override
-    public void setCursorVisibility(boolean b) throws IOException {
+    public UnixTerminal setCursorVisibility(boolean b) throws IOException {
         writeControlSequence(("?25" + (b ? "h" : "l")).getBytes());
+        return this;
     }
 
     @Override
-    public void setTextRendition(TextRendition... renditions) throws IOException {
-        if (renditions == null) {
-            return;
+    public UnixTerminal setTextRendition(TextRendition... renditions) throws IOException {
+        if (renditions != null) {
+            StringBuilder sb = new StringBuilder();
+            for (TextRendition rendition : renditions) {
+                sb.append(rendition);
+            }
+            put(sb.toString());
         }
-        StringBuilder sb = new StringBuilder();
-        for (TextRendition rendition : renditions) {
-            sb.append(rendition);
-        }
-        put(sb.toString());
+        return this;
     }
 
     @Override
-    public void resetTextRendition() throws IOException {
-        setTextRendition(TextRendition.RESET_ALL);
+    public UnixTerminal resetTextRendition() throws IOException {
+        return setTextRendition(TextRendition.RESET_ALL);
     }
 
     @Override
-    public void put(char c) throws IOException {
+    public UnixTerminal put(char c) throws IOException {
         writeOutput(convertCharset(c));
+        return this;
     }
 
     @Override
-    public void put(String str) throws IOException {
-        if (str == null) return;
-        for (int i = 0; i < str.length(); i++) {
-            put(str.charAt(i));
+    public UnixTerminal put(String str) throws IOException {
+        if (str != null) {
+            for (int i = 0; i < str.length(); i++) {
+                put(str.charAt(i));
+            }
         }
+        return this;
     }
 
     @Override
-    public void put(String str, TextRendition... renditions) throws IOException {
-        if (str == null) return;
-        setTextRendition(renditions);
-        put(str);
-        resetTextRendition();
+    public UnixTerminal put(String str, TextRendition... renditions) throws IOException {
+        if (str != null) {
+            setTextRendition(renditions);
+            put(str);
+            resetTextRendition();
+        }
+        return this;
     }
 
     @Override
-    public void put(int row, int column, String str, TextRendition... renditions) throws IOException {
+    public UnixTerminal put(int row, int column, String str, TextRendition... renditions) throws IOException {
         setCursorPosition(row, column);
-        put(str, renditions);
+        return put(str, renditions);
     }
 
     @Override
-    public void clear() throws IOException {
+    public UnixTerminal clear() throws IOException {
         writeControlSequence((byte) '2', (byte) 'J');
+        return this;
     }
 
     @Override
-    public void flush() throws IOException {
+    public UnixTerminal flush() throws IOException {
         output.flush();
+        return this;
     }
 
     /**
