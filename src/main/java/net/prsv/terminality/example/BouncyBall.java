@@ -10,11 +10,8 @@ public class BouncyBall {
         // create a new terminal with default settings
         UnixTerminal t = new UnixTerminal();
 
-        t.begin(); // enter the raw mode
-        t.clear(); // clear screen
-
-        t.setCursorVisibility(false); // make the cursor invisible
-        t.flush(); // apply the changes
+        // enter the raw mode, clear the screen, make the cursor invisible and apply the changes
+        t.begin().clear().setCursorVisibility(false).flush();
 
         // declare variables for later use
         String statusBarString;
@@ -58,8 +55,7 @@ public class BouncyBall {
             }
 
             // print the ball at its current position
-            t.put(row, column, "⬤", TextRendition.FG_WHITE_INTENSE);
-            t.flush();
+            t.put(row, column, "⬤", TextRendition.FG_WHITE_INTENSE).flush();
 
             // check for keyboard input
             KeyStroke ks = t.readKey(false);

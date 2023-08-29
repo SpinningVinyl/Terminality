@@ -8,12 +8,12 @@ public class KeyStrokeDemo {
 
     public static void main(String[] args) throws IOException {
         UnixTerminal t = new UnixTerminal();
-        t.begin();
-        t.clear();
-        t.setCursorVisibility(false);
-        t.setCursorPosition(5, 5);
-        t.put("Press any key combination to show keystroke details, [Ctrl+q] to quit.");
-        t.flush();
+        t.begin()
+                .clear()
+                .setCursorVisibility(false)
+                .setCursorPosition(5,5)
+                .put("Press any key combination to show keystroke details, [Ctrl+q] to quit.")
+                .flush();
 
         KeyStroke ks;
         boolean quit = false;
@@ -23,10 +23,10 @@ public class KeyStrokeDemo {
             if (ks.type == KeyType.CHARACTER && ks.c == 'q' && ks.ctrl) {
                 quit = true;
             }
-            t.clear();
-            t.setCursorPosition(5, 5);
-            t.put(ks.toString());
-            t.flush();
+            t.clear()
+                    .setCursorPosition(5, 5)
+                    .put(ks.toString())
+                    .flush();
         }
         t.end();
     }
