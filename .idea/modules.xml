@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/LinuxTerminal.iml" filepath="$PROJECT_DIR$/LinuxTerminal.iml" />
+      <module fileurl="file://$PROJECT_DIR$/terminality.iml" filepath="$PROJECT_DIR$/terminality.iml" />
     </modules>
   </component>
 </project>

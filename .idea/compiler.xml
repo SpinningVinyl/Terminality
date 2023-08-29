@@ -6,11 +6,12 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
-        <module name="LinuxTerminal" />
+        <module name="terminality" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
       <module name="LinuxTerminal" target="11" />
+      <module name="terminality" target="11" />
     </bytecodeTargetLevel>
   </component>
 </project>
