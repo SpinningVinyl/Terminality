@@ -238,7 +238,7 @@ public class UnixTerminal implements Terminal {
     @Override
     public boolean sizeChanged() {
         boolean result = sizeChange.getAcquire();
-        sizeChange.set(false);
+        sizeChange.setRelease(false);
         return result;
     }
 
@@ -254,7 +254,8 @@ public class UnixTerminal implements Terminal {
             returnCode = -1;
         }
         if (returnCode != 0) {
-            throw new RuntimeException("Can't determine windows size");
+            throw new RuntimeException(String.format("Can't determine window size; ioctl failed with return code [%d]",
+                    returnCode));
         }
         return new WindowSize(winSize.ws_row, winSize.ws_col);
     }
@@ -284,7 +285,7 @@ public class UnixTerminal implements Terminal {
      * Please be aware that not all terminal emulators support this functionality, and it is advisable to call
      * {@link #getTerminalSize()} to verify that the terminal has honored the command. Additionally, some terminals
      * simply change their <em>reported</em> size without actually changing the window dimensions, so probably
-     * just don't use this method.
+     * just don't use this method ever.
      * @param rows the number of rows
      * @param columns the number of columns
      * @throws IOException if writing to the output fails for some reason
@@ -304,7 +305,7 @@ public class UnixTerminal implements Terminal {
             throw new IOException(e);
         }
         if (returnCode != 0) {
-            throw new IOException(String.format("tcgetattr failed with return code[%d]", returnCode));
+            throw new IOException(String.format("tcgetattr failed with return code [%d]", returnCode));
         }
         return t;
     }
@@ -317,7 +318,7 @@ public class UnixTerminal implements Terminal {
             throw new IOException(e);
         }
         if (returnCode != 0) {
-            throw new IOException(String.format("tcsetattr failed with return code[%d]", returnCode));
+            throw new IOException(String.format("tcsetattr failed with return code [%d]", returnCode));
         }
     }
 
@@ -581,7 +582,7 @@ public class UnixTerminal implements Terminal {
 
     private class TerminalResizeListener implements Runnable {
         public void run() {
-            sizeChange.setRelease(false);
+            sizeChange.setRelease(true);
         }
     }
 
