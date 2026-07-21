@@ -31,9 +31,9 @@ public class UnixTerminal implements Terminal {
 
     private static final char ESC = 0x1b;
 
-    private static PosixLibC.Termios originalState = new PosixLibC.Termios();
+    private PosixLibC.Termios originalState;
 
-    private final PosixLibC lib = PosixLibC.INSTANCE;
+    private final PosixLibC lib;
 
     private final BufferedReader input;
     private final BufferedOutputStream output;
@@ -46,6 +46,8 @@ public class UnixTerminal implements Terminal {
     private final boolean handleWinch;
 
     private boolean isInitialized = false;
+
+    private boolean shutdownHookRegistered = false;
 
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
@@ -64,9 +66,15 @@ public class UnixTerminal implements Terminal {
     }
 
     public UnixTerminal(InputStream in, OutputStream out, Charset charset, boolean handleSigwinch, boolean asyncIO) {
+        this(in, out, charset, handleSigwinch, asyncIO, PosixLibC.INSTANCE);
+    }
+
+    UnixTerminal(InputStream in, OutputStream out, Charset charset, boolean handleSigwinch, boolean asyncIO,
+                 PosixLibC lib) {
         input = new BufferedReader(new InputStreamReader(in));
         output = new BufferedOutputStream(out);
         this.charset = charset;
+        this.lib = lib;
         handleWinch = handleSigwinch;
         if (handleWinch) {
             resizeListener = new TerminalResizeListener();
@@ -100,38 +108,85 @@ public class UnixTerminal implements Terminal {
 
     @Override
     public synchronized UnixTerminal begin() throws IOException, RuntimeException {
+        if (isInitialized) {
+            return this;
+        }
         if (!isTTY()) {
             throw new RuntimeException("Cannot initialize: not a TTY");
         }
-        registerShutdownHook();
-        if (handleWinch) {
-            registerResizeListener(resizeListener);
-        }
-        originalState = getTerminalAttrs();
-        PosixLibC.Termios termios = PosixLibC.Termios.copy(originalState);
+        PosixLibC.Termios savedState = getTerminalAttrs();
+        PosixLibC.Termios termios = PosixLibC.Termios.copy(savedState);
         // enable the raw mode
-        termios.c_lflag &= ~(PosixLibC.ECHO | PosixLibC.ECHONL | ~PosixLibC.IEXTEN | PosixLibC.ICANON | PosixLibC.ISIG);
-        termios.c_iflag &= ~(PosixLibC.IXON | PosixLibC.IXANY | PosixLibC.ICRNL | PosixLibC.ISTRIP);
-        termios.c_oflag &= ~(PosixLibC.OPOST);
+        termios.setLocalFlags(termios.getLocalFlags()
+                & ~(PosixLibC.ECHO | PosixLibC.ECHONL | PosixLibC.IEXTEN | PosixLibC.ICANON | PosixLibC.ISIG));
+        termios.setInputFlags(termios.getInputFlags()
+                & ~(PosixLibC.IXON | PosixLibC.IXANY | PosixLibC.ICRNL | PosixLibC.ISTRIP));
+        termios.setOutputFlags(termios.getOutputFlags() & ~PosixLibC.OPOST);
         /* don't wait for timeout or for the keyboard buffer to fill up -- send the changes immediately
         (not usually required hence commented out. I'm a bit leery of touching this part of the struct because of
         possible segfaults depending on the host platform.)
         termios.c_cc[PosixLibC.VMIN] = 0;
         termios.c_cc[PosixLibC.VTIME] = 0; */
-        setTerminalAttrs(termios);
-        isInitialized = true;
-        return this;
+        try {
+            if (!shutdownHookRegistered) {
+                registerShutdownHook();
+                shutdownHookRegistered = true;
+            }
+            if (handleWinch) {
+                registerResizeListener(resizeListener);
+            }
+            setTerminalAttrs(termios);
+            originalState = savedState;
+            isInitialized = true;
+            return this;
+        } catch (IOException | RuntimeException | Error initializationFailure) {
+            try {
+                setTerminalAttrs(savedState);
+            } catch (IOException restorationFailure) {
+                initializationFailure.addSuppressed(restorationFailure);
+            }
+            originalState = null;
+            isInitialized = false;
+            throw initializationFailure;
+        }
     }
 
     @Override
-    public void end() throws IOException {
-        writeControlSequence(TextRendition.RESET_ALL.toString().getBytes()); // reset FG and BG color
-        clear();
-        setCursorVisibility(true);
-        writeControlSequence((byte) 'H'); // reset the cursor position
-        flush();
-        setTerminalAttrs(originalState); // restore original terminal settings
-        isInitialized = false;
+    public synchronized void end() throws IOException {
+        if (!isInitialized) {
+            return;
+        }
+
+        IOException failure = null;
+        boolean stateRestored = false;
+        try {
+            writeControlSequence(TextRendition.RESET_ALL.toString().getBytes()); // reset FG and BG color
+            clear();
+            setCursorVisibility(true);
+            writeControlSequence((byte) 'H'); // reset the cursor position
+            flush();
+        } catch (IOException outputFailure) {
+            failure = outputFailure;
+        } finally {
+            try {
+                setTerminalAttrs(originalState);
+                stateRestored = true;
+            } catch (IOException restorationFailure) {
+                if (failure == null) {
+                    failure = restorationFailure;
+                } else {
+                    failure.addSuppressed(restorationFailure);
+                }
+            }
+            if (stateRestored) {
+                originalState = null;
+                isInitialized = false;
+            }
+        }
+
+        if (failure != null) {
+            throw failure;
+        }
     }
 
     @Override
@@ -298,7 +353,7 @@ public class UnixTerminal implements Terminal {
 
     private synchronized PosixLibC.Termios getTerminalAttrs() throws IOException {
         int returnCode;
-        PosixLibC.Termios t = new PosixLibC.Termios();
+        PosixLibC.Termios t = PosixLibC.Termios.create();
         try {
             returnCode = lib.tcgetattr(PosixLibC.STDIN_FD, t);
         } catch (LastErrorException e) {
