@@ -47,9 +47,6 @@ public interface PosixLibC extends Library {
     int TIOCGWINSZ  = 0x5413;
     int TIOCGWINSZ_DARWIN = 0x40087468;
 
-    // different platforms require different values of NCSS
-    int NCSS = Platform.isMac() ? 20 : 32;
-
     // this signal lets the application know that the terminal size has changed
     int SIGWINCH = 28;
 
@@ -61,33 +58,169 @@ public interface PosixLibC extends Library {
     }
 
 
-    @Structure.FieldOrder(value = {"c_iflag", "c_oflag", "c_cflag", "c_lflag", "c_cc"})
-    class Termios extends Structure {
-        public int c_iflag, c_oflag, c_cflag, c_lflag;
+    abstract class Termios extends Structure {
 
-        public byte[] c_cc = new byte[NCSS];
-
-        public Termios() {
+        public static Termios create() {
+            return Platform.isMac() ? new DarwinTermios() : new LinuxTermios();
         }
 
-        public static Termios copy(Termios t) {
-            Termios copy = new Termios();
-            copy.c_iflag = t.c_iflag;
-            copy.c_oflag = t.c_oflag;
-            copy.c_cflag = t.c_cflag;
-            copy.c_lflag = t.c_lflag;
-            copy.c_cc = t.c_cc.clone();
+        public static Termios copy(Termios termios) {
+            return termios.copy();
+        }
+
+        abstract long getInputFlags();
+
+        abstract void setInputFlags(long flags);
+
+        abstract long getOutputFlags();
+
+        abstract void setOutputFlags(long flags);
+
+        abstract long getLocalFlags();
+
+        abstract void setLocalFlags(long flags);
+
+        abstract Termios copy();
+    }
+
+    /*
+     * glibc's Linux layout. c_line is easy to miss, but omitting it shifts
+     * c_cc and makes the structure too small for tcgetattr(). The speed fields
+     * also form part of the userspace ABI even though this library does not
+     * modify them.
+     */
+    @Structure.FieldOrder(value = {
+            "c_iflag", "c_oflag", "c_cflag", "c_lflag",
+            "c_line", "c_cc", "c_ispeed", "c_ospeed"
+    })
+    class LinuxTermios extends Termios {
+        public int c_iflag, c_oflag, c_cflag, c_lflag;
+        public byte c_line;
+        public byte[] c_cc = new byte[32];
+        public int c_ispeed, c_ospeed;
+
+        @Override
+        long getInputFlags() {
+            return Integer.toUnsignedLong(c_iflag);
+        }
+
+        @Override
+        void setInputFlags(long flags) {
+            c_iflag = (int) flags;
+        }
+
+        @Override
+        long getOutputFlags() {
+            return Integer.toUnsignedLong(c_oflag);
+        }
+
+        @Override
+        void setOutputFlags(long flags) {
+            c_oflag = (int) flags;
+        }
+
+        @Override
+        long getLocalFlags() {
+            return Integer.toUnsignedLong(c_lflag);
+        }
+
+        @Override
+        void setLocalFlags(long flags) {
+            c_lflag = (int) flags;
+        }
+
+        @Override
+        Termios copy() {
+            LinuxTermios copy = new LinuxTermios();
+            copy.c_iflag = c_iflag;
+            copy.c_oflag = c_oflag;
+            copy.c_cflag = c_cflag;
+            copy.c_lflag = c_lflag;
+            copy.c_line = c_line;
+            copy.c_cc = c_cc.clone();
+            copy.c_ispeed = c_ispeed;
+            copy.c_ospeed = c_ospeed;
             return copy;
         }
 
         @Override
         public String toString() {
-            return "Termios{" +
-                    "c_iflag=" + c_iflag +
-                    ", c_oflag=" + c_oflag +
-                    ", c_cflag=" + c_cflag +
-                    ", c_lflag=" + c_lflag +
+            return "LinuxTermios{" +
+                    "c_iflag=" + Integer.toUnsignedString(c_iflag) +
+                    ", c_oflag=" + Integer.toUnsignedString(c_oflag) +
+                    ", c_cflag=" + Integer.toUnsignedString(c_cflag) +
+                    ", c_lflag=" + Integer.toUnsignedString(c_lflag) +
+                    ", c_line=" + Byte.toUnsignedInt(c_line) +
                     ", c_cc=" + Arrays.toString(c_cc) +
+                    ", c_ispeed=" + Integer.toUnsignedString(c_ispeed) +
+                    ", c_ospeed=" + Integer.toUnsignedString(c_ospeed) +
+                    '}';
+        }
+    }
+
+    /* Darwin uses unsigned long for tcflag_t and speed_t on 64-bit macOS. */
+    @Structure.FieldOrder(value = {
+            "c_iflag", "c_oflag", "c_cflag", "c_lflag",
+            "c_cc", "c_ispeed", "c_ospeed"
+    })
+    class DarwinTermios extends Termios {
+        public long c_iflag, c_oflag, c_cflag, c_lflag;
+        public byte[] c_cc = new byte[20];
+        public long c_ispeed, c_ospeed;
+
+        @Override
+        long getInputFlags() {
+            return c_iflag;
+        }
+
+        @Override
+        void setInputFlags(long flags) {
+            c_iflag = flags;
+        }
+
+        @Override
+        long getOutputFlags() {
+            return c_oflag;
+        }
+
+        @Override
+        void setOutputFlags(long flags) {
+            c_oflag = flags;
+        }
+
+        @Override
+        long getLocalFlags() {
+            return c_lflag;
+        }
+
+        @Override
+        void setLocalFlags(long flags) {
+            c_lflag = flags;
+        }
+
+        @Override
+        Termios copy() {
+            DarwinTermios copy = new DarwinTermios();
+            copy.c_iflag = c_iflag;
+            copy.c_oflag = c_oflag;
+            copy.c_cflag = c_cflag;
+            copy.c_lflag = c_lflag;
+            copy.c_cc = c_cc.clone();
+            copy.c_ispeed = c_ispeed;
+            copy.c_ospeed = c_ospeed;
+            return copy;
+        }
+
+        @Override
+        public String toString() {
+            return "DarwinTermios{" +
+                    "c_iflag=" + Long.toUnsignedString(c_iflag) +
+                    ", c_oflag=" + Long.toUnsignedString(c_oflag) +
+                    ", c_cflag=" + Long.toUnsignedString(c_cflag) +
+                    ", c_lflag=" + Long.toUnsignedString(c_lflag) +
+                    ", c_cc=" + Arrays.toString(c_cc) +
+                    ", c_ispeed=" + Long.toUnsignedString(c_ispeed) +
+                    ", c_ospeed=" + Long.toUnsignedString(c_ospeed) +
                     '}';
         }
     }

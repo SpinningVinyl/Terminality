@@ -18,7 +18,7 @@ package net.prsv.terminality;
 
 import java.io.IOException;
 
-public interface Terminal {
+public interface Terminal extends AutoCloseable {
 
     /**
      * Returns the size of the terminal window.
@@ -46,6 +46,18 @@ public interface Terminal {
      * @throws IOException if there is an error writing to stdout or calling native functions
      */
     void end() throws IOException;
+
+    /**
+     * Restores the original state of the terminal.
+     *
+     * <p>This is equivalent to {@link #end()} and allows a terminal to be used
+     * with try-with-resources.</p>
+     * @throws IOException if restoring the terminal fails
+     */
+    @Override
+    default void close() throws IOException {
+        end();
+    }
 
     /**
      * Set the title of the terminal window.
