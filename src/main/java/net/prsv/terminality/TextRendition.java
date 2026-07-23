@@ -44,14 +44,14 @@ public class TextRendition {
     public static final TextRendition FG_CYAN_BOLD = new TextRendition("1", "36");
     public static final TextRendition FG_WHITE_BOLD = new TextRendition("1", "37");
 
-    public static final TextRendition FG_BLACK_UNDERLINE = new TextRendition("30");
-    public static final TextRendition FG_RED_UNDERLINE = new TextRendition("31");
-    public static final TextRendition FG_GREEN_UNDERLINE = new TextRendition("32");
-    public static final TextRendition FG_YELLOW_UNDERLINE = new TextRendition("33");
-    public static final TextRendition FG_BLUE_UNDERLINE = new TextRendition("34");
-    public static final TextRendition FG_PURPLE_UNDERLINE = new TextRendition("35");
-    public static final TextRendition FG_CYAN_UNDERLINE = new TextRendition("36");
-    public static final TextRendition FG_WHITE_UNDERLINE = new TextRendition("37");
+    public static final TextRendition FG_BLACK_UNDERLINE = new TextRendition("4", "30");
+    public static final TextRendition FG_RED_UNDERLINE = new TextRendition("4", "31");
+    public static final TextRendition FG_GREEN_UNDERLINE = new TextRendition("4", "32");
+    public static final TextRendition FG_YELLOW_UNDERLINE = new TextRendition("4", "33");
+    public static final TextRendition FG_BLUE_UNDERLINE = new TextRendition("4", "34");
+    public static final TextRendition FG_PURPLE_UNDERLINE = new TextRendition("4", "35");
+    public static final TextRendition FG_CYAN_UNDERLINE = new TextRendition("4", "36");
+    public static final TextRendition FG_WHITE_UNDERLINE = new TextRendition("4", "37");
 
     public static final TextRendition FG_BLACK_INTENSE = new TextRendition("0", "90");
     public static final TextRendition FG_RED_INTENSE = new TextRendition("0", "91");
