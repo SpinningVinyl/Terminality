@@ -24,8 +24,10 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class UnixTerminal implements Terminal {
 
@@ -38,6 +40,7 @@ public class UnixTerminal implements Terminal {
     private final BufferedReader input;
     private final BufferedOutputStream output;
     private final Charset charset;
+    private final Object inputLock = new Object();
 
     private final TerminalResizeListener resizeListener;
 
@@ -45,15 +48,17 @@ public class UnixTerminal implements Terminal {
 
     private final boolean handleWinch;
 
-    private boolean isInitialized = false;
+    private volatile boolean isInitialized = false;
 
     private boolean shutdownHookRegistered = false;
 
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
-    private final Thread asyncKeyboardReader;
+    private static final int KEY_QUEUE_CAPACITY = 256;
 
-    private final ConcurrentLinkedQueue<KeyStroke> keyQueue;
+    private final BlockingQueue<KeyStroke> keyQueue;
+    private final AtomicReference<IOException> asyncKeyboardFailure;
+    private volatile Thread asyncKeyboardReader;
 
 //  ===================== C O N S T R U C T O R S ======================
 
@@ -82,26 +87,13 @@ public class UnixTerminal implements Terminal {
             resizeListener = null;
         }
         if (asyncIO) {
-            keyQueue = new ConcurrentLinkedQueue<>();
-            asyncKeyboardReader = new Thread(() -> {
-                try {
-                    while (!Thread.interrupted()) {
-                        KeyStroke ks = readKeyStroke(input, false); // non-blocking, obviously
-                        if (ks != null) {
-                            keyQueue.add(ks);
-                        }
-                        Thread.sleep(5); // poll the keyboard input 200 times a second
-                    }
-                } catch (IOException | InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            });
-            asyncKeyboardReader.setDaemon(true);
-            asyncKeyboardReader.start();
+            keyQueue = new ArrayBlockingQueue<>(KEY_QUEUE_CAPACITY);
+            asyncKeyboardFailure = new AtomicReference<>();
         } else {
             keyQueue = null;
-            asyncKeyboardReader = null;
+            asyncKeyboardFailure = null;
         }
+        asyncKeyboardReader = null;
     }
 
 //  ==================== P U B L I C   M E T H O D S ===================
@@ -110,6 +102,12 @@ public class UnixTerminal implements Terminal {
     public synchronized UnixTerminal begin() throws IOException, RuntimeException {
         if (isInitialized) {
             return this;
+        }
+        if (asyncKeyboardReader != null) {
+            if (asyncKeyboardReader.isAlive()) {
+                throw new IOException("Cannot initialize: previous asynchronous keyboard reader is still running");
+            }
+            asyncKeyboardReader = null;
         }
         if (!isTTY()) {
             throw new RuntimeException("Cannot initialize: not a TTY");
@@ -138,8 +136,14 @@ public class UnixTerminal implements Terminal {
             setTerminalAttrs(termios);
             originalState = savedState;
             isInitialized = true;
+            startAsyncKeyboardReader();
             return this;
         } catch (IOException | RuntimeException | Error initializationFailure) {
+            try {
+                stopAsyncKeyboardReader();
+            } catch (IOException readerFailure) {
+                initializationFailure.addSuppressed(readerFailure);
+            }
             try {
                 setTerminalAttrs(savedState);
             } catch (IOException restorationFailure) {
@@ -160,13 +164,22 @@ public class UnixTerminal implements Terminal {
         IOException failure = null;
         boolean stateRestored = false;
         try {
+            stopAsyncKeyboardReader();
+        } catch (IOException readerFailure) {
+            failure = readerFailure;
+        }
+        try {
             writeControlSequence(TextRendition.RESET_ALL.toString().getBytes()); // reset FG and BG color
             clear();
             setCursorVisibility(true);
             writeControlSequence((byte) 'H'); // reset the cursor position
             flush();
         } catch (IOException outputFailure) {
-            failure = outputFailure;
+            if (failure == null) {
+                failure = outputFailure;
+            } else {
+                failure.addSuppressed(outputFailure);
+            }
         } finally {
             try {
                 setTerminalAttrs(originalState);
@@ -200,7 +213,15 @@ public class UnixTerminal implements Terminal {
             throw new RuntimeException("The terminal is not initialized");
         }
         if (keyQueue != null) { // async IO mode -- return a KeyStroke from the queue
-            return keyQueue.poll();
+            KeyStroke keyStroke = keyQueue.poll();
+            if (keyStroke != null) {
+                return keyStroke;
+            }
+            IOException readerFailure = asyncKeyboardFailure.get();
+            if (readerFailure != null) {
+                throw readerFailure;
+            }
+            return null;
         }
         return readKeyStroke(input, blocking);
     }
@@ -478,30 +499,89 @@ public class UnixTerminal implements Terminal {
         return null;
     }
 
-    private synchronized KeyStroke readKeyStroke(BufferedReader in, boolean blocking) throws IOException {
-        if (in.ready() || blocking) {
-            char[] chars = new char[7];
-            int result = in.read(chars, 0, 7);
-            if (result == -1) {
-                return new KeyStroke(KeyType.EOF, false, false);
-            }
-            if (result == 1) {
-                KeyStroke ks = ctrlKey(chars[0]);
-                if (ks != null) {
-                    return ks;
-                } else if (chars[0] == 0x7f) {
-                    return new KeyStroke(KeyType.DELETE, false, false);
+    private KeyStroke readKeyStroke(BufferedReader in, boolean blocking) throws IOException {
+        synchronized (inputLock) {
+            if (in.ready() || blocking) {
+                char[] chars = new char[7];
+                int result = in.read(chars, 0, 7);
+                if (result == -1) {
+                    return new KeyStroke(KeyType.EOF, false, false);
                 }
-                return new KeyStroke(chars[0], false, false);
+                if (result == 1) {
+                    KeyStroke ks = ctrlKey(chars[0]);
+                    if (ks != null) {
+                        return ks;
+                    } else if (chars[0] == 0x7f) {
+                        return new KeyStroke(KeyType.DELETE, false, false);
+                    }
+                    return new KeyStroke(chars[0], false, false);
+                }
+                if (result == 2) {
+                    return altCtrlKey(chars[0], chars[1]);
+                }
+                if (result >= 3) {
+                    return SpecialKeyMatcher.match(result, chars);
+                }
             }
-            if (result == 2) {
-                return altCtrlKey(chars[0], chars[1]);
-            }
-            if (result >= 3) {
-                return SpecialKeyMatcher.match(result, chars);
-            }
+            return null;
         }
-        return null;
+    }
+
+    private void startAsyncKeyboardReader() {
+        if (keyQueue == null) {
+            return;
+        }
+
+        keyQueue.clear();
+        asyncKeyboardFailure.set(null);
+        Thread reader = new Thread(() -> {
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    KeyStroke keyStroke = readKeyStroke(input, false);
+                    if (keyStroke == null) {
+                        Thread.sleep(5);
+                        continue;
+                    }
+
+                    keyQueue.put(keyStroke);
+                    if (keyStroke.type == KeyType.EOF) {
+                        return;
+                    }
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            } catch (IOException | RuntimeException readerFailure) {
+                asyncKeyboardFailure.compareAndSet(null,
+                        readerFailure instanceof IOException
+                                ? (IOException) readerFailure
+                                : new IOException("Asynchronous keyboard reader failed", readerFailure));
+            }
+        }, "terminality-keyboard-reader");
+        reader.setDaemon(true);
+        asyncKeyboardReader = reader;
+        reader.start();
+    }
+
+    private void stopAsyncKeyboardReader() throws IOException {
+        Thread reader = asyncKeyboardReader;
+        if (reader == null) {
+            return;
+        }
+
+        reader.interrupt();
+        try {
+            reader.join(1000);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while stopping asynchronous keyboard reader", interrupted);
+        } finally {
+            keyQueue.clear();
+        }
+
+        if (reader.isAlive()) {
+            throw new IOException("Asynchronous keyboard reader did not stop");
+        }
+        asyncKeyboardReader = null;
     }
 
     /*
