@@ -5,17 +5,24 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class UnixTerminalLifecycleTest {
 
@@ -123,15 +130,122 @@ class UnixTerminalLifecycleTest {
         assertEquals("\u001b]2;Terminality\u0007", output.toString(StandardCharsets.UTF_8));
     }
 
+    @Test
+    void asynchronousReaderFollowsTerminalLifecycle() throws Exception {
+        UnixTerminal terminal = terminal(new FakePosixLibC(), new ByteArrayOutputStream(),
+                new ByteArrayInputStream(new byte[0]), true);
+
+        assertNull(asyncKeyboardReader(terminal));
+
+        terminal.begin();
+        Thread firstReader = asyncKeyboardReader(terminal);
+        assertNotNull(firstReader);
+        assertTrue(firstReader.isAlive());
+
+        terminal.end();
+        assertFalse(firstReader.isAlive());
+        assertNull(asyncKeyboardReader(terminal));
+
+        terminal.begin();
+        Thread secondReader = asyncKeyboardReader(terminal);
+        assertNotNull(secondReader);
+        assertNotSame(firstReader, secondReader);
+        assertTrue(secondReader.isAlive());
+
+        terminal.end();
+    }
+
+    @Test
+    void asynchronousReaderFailureIsReportedByReadKey() throws Exception {
+        UnixTerminal terminal = terminal(new FakePosixLibC(), new ByteArrayOutputStream(),
+                new FailingInputStream(), true);
+        terminal.begin();
+
+        IOException failure = awaitReaderFailure(terminal);
+
+        assertEquals("expected input failure", failure.getMessage());
+        terminal.end();
+    }
+
+    @Test
+    void beginRejectsPreviousAsynchronousReaderThatIsStillAlive() throws Exception {
+        FakePosixLibC libc = new FakePosixLibC();
+        UnixTerminal terminal = terminal(libc, new ByteArrayOutputStream(),
+                new ByteArrayInputStream(new byte[0]), true);
+        CountDownLatch releaseReader = new CountDownLatch(1);
+        Thread previousReader = new Thread(() -> {
+            try {
+                releaseReader.await();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        previousReader.start();
+        setAsyncKeyboardReader(terminal, previousReader);
+
+        try {
+            IOException failure = assertThrows(IOException.class, terminal::begin);
+
+            assertEquals("Cannot initialize: previous asynchronous keyboard reader is still running",
+                    failure.getMessage());
+            assertTrue(libc.localFlagsSet.isEmpty());
+        } finally {
+            releaseReader.countDown();
+            previousReader.join(1000);
+        }
+    }
+
     private static UnixTerminal terminal(FakePosixLibC libc, OutputStream output) {
-        return new UnixTerminal(new ByteArrayInputStream(new byte[0]), output, StandardCharsets.UTF_8,
-                false, false, libc);
+        return terminal(libc, output, new ByteArrayInputStream(new byte[0]), false);
+    }
+
+    private static UnixTerminal terminal(FakePosixLibC libc, OutputStream output,
+                                         InputStream input, boolean asyncIO) {
+        return new UnixTerminal(input, output, StandardCharsets.UTF_8, false, asyncIO, libc);
+    }
+
+    private static Thread asyncKeyboardReader(UnixTerminal terminal) throws ReflectiveOperationException {
+        Field field = UnixTerminal.class.getDeclaredField("asyncKeyboardReader");
+        field.setAccessible(true);
+        return (Thread) field.get(terminal);
+    }
+
+    private static void setAsyncKeyboardReader(UnixTerminal terminal, Thread reader)
+            throws ReflectiveOperationException {
+        Field field = UnixTerminal.class.getDeclaredField("asyncKeyboardReader");
+        field.setAccessible(true);
+        field.set(terminal, reader);
+    }
+
+    private static IOException awaitReaderFailure(UnixTerminal terminal) throws Exception {
+        long deadline = System.nanoTime() + 1_000_000_000L;
+        while (System.nanoTime() < deadline) {
+            try {
+                terminal.readKey();
+            } catch (IOException failure) {
+                return failure;
+            }
+            Thread.sleep(5);
+        }
+        return fail("Timed out waiting for asynchronous keyboard reader failure");
     }
 
     private static final class FailingOutputStream extends OutputStream {
         @Override
         public void write(int value) throws IOException {
             throw new IOException("expected output failure");
+        }
+    }
+
+    private static final class FailingInputStream extends InputStream {
+        @Override
+        public int available() {
+            return 1;
+        }
+
+        @Override
+        public int read() throws IOException {
+            throw new IOException("expected input failure");
         }
     }
 
