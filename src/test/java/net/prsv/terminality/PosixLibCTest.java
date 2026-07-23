@@ -1,5 +1,6 @@
 package net.prsv.terminality;
 
+import com.sun.jna.Platform;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -9,6 +10,40 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 
 class PosixLibCTest {
+
+    @Test
+    void linuxTermiosConstantsMatchLinuxAbi() {
+        assertTermiosConstants(TermiosConstants.LINUX,
+                1, 2, 8, 64, 0x020, 1024, 2048, 256, 0x08000, 1, 6, 5);
+    }
+
+    @Test
+    void darwinTermiosConstantsMatchDarwinAbi() {
+        assertTermiosConstants(TermiosConstants.DARWIN,
+                0x00000080, 0x00000100, 0x00000008, 0x00000010,
+                0x00000020, 0x00000200, 0x00000800, 0x00000100,
+                0x00000400, 0x00000001, 16, 17);
+    }
+
+    @Test
+    void publicConstantsUseCurrentPlatformValues() {
+        TermiosConstants expected = Platform.isMac()
+                ? TermiosConstants.DARWIN
+                : TermiosConstants.LINUX;
+
+        assertEquals(expected.isig, PosixLibC.ISIG);
+        assertEquals(expected.icanon, PosixLibC.ICANON);
+        assertEquals(expected.echo, PosixLibC.ECHO);
+        assertEquals(expected.echonl, PosixLibC.ECHONL);
+        assertEquals(expected.istrip, PosixLibC.ISTRIP);
+        assertEquals(expected.ixon, PosixLibC.IXON);
+        assertEquals(expected.ixany, PosixLibC.IXANY);
+        assertEquals(expected.icrnl, PosixLibC.ICRNL);
+        assertEquals(expected.iexten, PosixLibC.IEXTEN);
+        assertEquals(expected.opost, PosixLibC.OPOST);
+        assertEquals(expected.vmin, PosixLibC.VMIN);
+        assertEquals(expected.vtime, PosixLibC.VTIME);
+    }
 
     @Test
     void linuxTermiosMatchesGlibcMemoryLayout() {
@@ -87,6 +122,25 @@ class PosixLibCTest {
         assertNotSame(original.c_cc, copy.c_cc);
         assertEquals(original.c_ispeed, copy.c_ispeed);
         assertEquals(original.c_ospeed, copy.c_ospeed);
+    }
+
+    private static void assertTermiosConstants(
+            TermiosConstants constants,
+            int isig, int icanon, int echo, int echonl,
+            int istrip, int ixon, int ixany, int icrnl,
+            int iexten, int opost, int vmin, int vtime) {
+        assertEquals(isig, constants.isig);
+        assertEquals(icanon, constants.icanon);
+        assertEquals(echo, constants.echo);
+        assertEquals(echonl, constants.echonl);
+        assertEquals(istrip, constants.istrip);
+        assertEquals(ixon, constants.ixon);
+        assertEquals(ixany, constants.ixany);
+        assertEquals(icrnl, constants.icrnl);
+        assertEquals(iexten, constants.iexten);
+        assertEquals(opost, constants.opost);
+        assertEquals(vmin, constants.vmin);
+        assertEquals(vtime, constants.vtime);
     }
 
     private static final class InspectableLinuxTermios extends PosixLibC.LinuxTermios {
