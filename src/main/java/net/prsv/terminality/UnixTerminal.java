@@ -207,7 +207,7 @@ public class UnixTerminal implements Terminal {
 
     @Override
     public UnixTerminal setTitle(String title) throws IOException {
-        writeControlSequence(("2;" + title + "\007").getBytes());
+        writeOutput((ESC + "]2;" + title + "\007").getBytes(charset));
         flush();
         return this;
     }

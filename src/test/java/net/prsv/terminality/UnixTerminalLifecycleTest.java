@@ -113,6 +113,16 @@ class UnixTerminalLifecycleTest {
         assertEquals(INITIAL_LOCAL_FLAGS, libc.localFlagsSet.get(1));
     }
 
+    @Test
+    void setTitleUsesOperatingSystemCommandSequence() throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        UnixTerminal terminal = terminal(new FakePosixLibC(), output);
+
+        terminal.setTitle("Terminality");
+
+        assertEquals("\u001b]2;Terminality\u0007", output.toString(StandardCharsets.UTF_8));
+    }
+
     private static UnixTerminal terminal(FakePosixLibC libc, OutputStream output) {
         return new UnixTerminal(new ByteArrayInputStream(new byte[0]), output, StandardCharsets.UTF_8,
                 false, false, libc);
