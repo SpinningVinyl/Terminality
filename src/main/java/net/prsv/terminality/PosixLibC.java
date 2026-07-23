@@ -28,20 +28,20 @@ public interface PosixLibC extends Library {
     int STDOUT_FD   = 1;
 
     // constants for tcsetattr()
-    int ISIG        = 1;  // signals
-    int ICANON      = 2;  // canonical mode
-    int ECHO        = 8;  // echo
-    int ECHONL      = 64; // echo the NL character
+    int ISIG        = TermiosConstants.current().isig;   // signals
+    int ICANON      = TermiosConstants.current().icanon; // canonical mode
+    int ECHO        = TermiosConstants.current().echo;   // echo
+    int ECHONL      = TermiosConstants.current().echonl; // echo the NL character
     int TCSAFLUSH   = 2;  // apply the changes the next time output is flushed
     int TCSANOW     = 0; // apply the changes immediately
-    int ISTRIP      = 0x020; // strip off 8th bit on input
-    int IXON        = 1024;  // enable/disable flow control on input
-    int IXANY       = 2048;  // use any character to re-enable input if stopped
-    int ICRNL       = 256;   // replace CR with NL on input
-    int IEXTEN      = 0x08000; // enable implementation-defined input processing
-    int OPOST       = 1; // enable implementation-defined output processing
-    int VMIN        = 6; // c_cc[VMIN] sets the minimum number of character for non-canonical read
-    int VTIME       = 5; // c_cc[VTIME] sets timeout (in 0.1s units) for non-canonical read
+    int ISTRIP      = TermiosConstants.current().istrip; // strip off 8th bit on input
+    int IXON        = TermiosConstants.current().ixon;   // enable/disable flow control on input
+    int IXANY       = TermiosConstants.current().ixany;  // use any character to re-enable input if stopped
+    int ICRNL       = TermiosConstants.current().icrnl;  // replace CR with NL on input
+    int IEXTEN      = TermiosConstants.current().iexten; // enable implementation-defined input processing
+    int OPOST       = TermiosConstants.current().opost;  // enable implementation-defined output processing
+    int VMIN        = TermiosConstants.current().vmin;   // c_cc[VMIN] minimum for non-canonical read
+    int VTIME       = TermiosConstants.current().vtime;  // c_cc[VTIME] timeout in 0.1s units
 
     // ioctl constants
     int TIOCGWINSZ  = 0x5413;
