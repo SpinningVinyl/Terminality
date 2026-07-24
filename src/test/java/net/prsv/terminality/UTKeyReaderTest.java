@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class UTKeyReaderTest {
 
@@ -133,6 +134,65 @@ class UTKeyReaderTest {
 
         assertSpecialKey(reader.readKey(true), KeyType.EOF, false, false, false);
         assertNull(reader.readKey(true));
+    }
+
+    @Test
+    void nonBlockingReadDistinguishesUnavailableInputFromEof() throws IOException {
+        InputStream input = new InputStream() {
+            @Override
+            public int available() {
+                return 0;
+            }
+
+            @Override
+            public int read() {
+                return fail("Unavailable input must not be read");
+            }
+        };
+        UTKeyReader unavailableReader = new UTKeyReader(
+                input,
+                StandardCharsets.UTF_8,
+                () -> UTKeyReader.InputStatus.UNAVAILABLE);
+
+        assertNull(unavailableReader.readKey(false));
+
+        UTKeyReader eofReader = new UTKeyReader(
+                new ByteArrayInputStream(new byte[0]),
+                StandardCharsets.UTF_8,
+                () -> UTKeyReader.InputStatus.EOF);
+
+        assertSpecialKey(eofReader.readKey(false), KeyType.EOF, false, false, false);
+        assertNull(eofReader.readKey(false));
+    }
+
+    @Test
+    void nonBlockingReadDrainsAvailableDataBeforeReportingEof() throws IOException {
+        UTKeyReader reader = new UTKeyReader(
+                new ByteArrayInputStream(new byte[]{'x'}),
+                StandardCharsets.UTF_8,
+                () -> UTKeyReader.InputStatus.EOF);
+
+        assertCharacter(reader.readKey(false), 'x', false, false);
+        assertSpecialKey(reader.readKey(false), KeyType.EOF, false, false, false);
+    }
+
+    @Test
+    void nonBlockingReadResolvesIncompleteInputWhenEofIsKnown() throws IOException {
+        UTKeyReader characterReader = new UTKeyReader(
+                new ByteArrayInputStream(new byte[]{(byte) 0xc3}),
+                StandardCharsets.UTF_8,
+                () -> UTKeyReader.InputStatus.EOF);
+
+        assertCharacter(characterReader.readKey(false), '\ufffd', false, false);
+        assertSpecialKey(characterReader.readKey(false), KeyType.EOF, false, false, false);
+
+        UTKeyReader escapeReader = new UTKeyReader(
+                new ByteArrayInputStream(new byte[]{0x1b}),
+                StandardCharsets.UTF_8,
+                () -> UTKeyReader.InputStatus.EOF);
+
+        assertSpecialKey(escapeReader.readKey(false), KeyType.ESCAPE, false, false, false);
+        assertSpecialKey(escapeReader.readKey(false), KeyType.EOF, false, false, false);
     }
 
     @Test

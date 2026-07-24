@@ -47,6 +47,8 @@ Conversely, calling ~readKey(false)~ or without any parameters reads the keyboar
 
 To use asynchronous keyboard input, instantiate the terminal as ~new UnixTerminal(true)~. Asynchronous input is always non-blocking.
 
+For the default standard input, Terminality uses the POSIX ~poll()~ function to distinguish temporarily unavailable input from end-of-input without blocking. An arbitrary custom ~InputStream~ cannot always provide this distinction through the Java API; EOF detection for such a stream depends on its ~available()~ implementation or on using a blocking read.
+
 ** Controlling the cursor
 Use the ~setCursorVisibility()~ method to control the visibility of the cursor:
 
