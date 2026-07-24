@@ -36,7 +36,7 @@ public interface Terminal extends AutoCloseable {
 
     /**
      * Turns the cursor visibility on or off.
-     * @param b if {@code true}, the cursor visibility is set to off.
+     * @param b if {@code false}, the cursor visibility is set to off.
      * @throws IOException if there is an error writing to stdout
      */
     Terminal setCursorVisibility(boolean b) throws IOException;
@@ -158,14 +158,15 @@ public interface Terminal extends AutoCloseable {
     /**
      * Checks whether the terminal supports color output.
      * @return {@code true} if the terminal supports color
-     * @throws IOException if there is an error writing to stdout
+     * @throws IOException if there is an error when detecting color support.
      */
     boolean hasColor() throws IOException;
 
     /**
      * Returns the number of colors that the terminal supports.
-     * @return the number of colors that the terminal supports
-     * @throws IOException if there is an error writing to stdout
+     * @return the number of colors that the terminal supports or -1 if color
+     * detection fails.
+     * @throws IOException if there is an error when detecting color support.
      */
     int getColors() throws IOException;
 

@@ -26,12 +26,16 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class UnixTerminal implements Terminal {
 
     private static final char ESC = 0x1b;
+
+    private static final int COLORS_UNKNOWN = -99;
+    private static final int COLORS_UNAVAILABLE = -1;
 
     private PosixLibC.Termios originalState;
 
@@ -54,10 +58,13 @@ public class UnixTerminal implements Terminal {
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
     private static final int KEY_QUEUE_CAPACITY = 256;
+    private static final long COLOR_DETECTION_TIMEOUT_MILLIS = 1000;
 
     private final BlockingQueue<KeyStroke> keyQueue;
     private final AtomicReference<IOException> asyncKeyboardFailure;
     private volatile Thread asyncKeyboardReader;
+    private PosixLibC.sig_t winchHandler;
+    private int colors = COLORS_UNKNOWN;
 
 //  ===================== C O N S T R U C T O R S ======================
 
@@ -169,7 +176,7 @@ public class UnixTerminal implements Terminal {
             failure = readerFailure;
         }
         try {
-            writeControlSequence(TextRendition.RESET_ALL.toString().getBytes()); // reset FG and BG color
+            resetTextRendition(); // reset FG and BG color
             clear();
             setCursorVisibility(true);
             writeControlSequence((byte) 'H'); // reset the cursor position
@@ -250,6 +257,7 @@ public class UnixTerminal implements Terminal {
         if (renditions != null) {
             StringBuilder sb = new StringBuilder();
             for (TextRendition rendition : renditions) {
+                if (rendition == null) continue;
                 sb.append(rendition);
             }
             put(sb.toString());
@@ -271,20 +279,33 @@ public class UnixTerminal implements Terminal {
     @Override
     public UnixTerminal put(String str) throws IOException {
         if (str != null) {
-            for (int i = 0; i < str.length(); i++) {
-                put(str.charAt(i));
-            }
+            writeOutput(convertCharset(str));
         }
         return this;
     }
 
     @Override
     public UnixTerminal put(String str, TextRendition... renditions) throws IOException {
+        IOException firstException = null;
         if (str != null) {
-            setTextRendition(renditions);
-            put(str);
-            resetTextRendition();
+            try {
+                setTextRendition(renditions);
+                put(str);
+            } catch(IOException e) {
+                firstException = e;
+            } finally {
+                try {
+                    resetTextRendition();
+                } catch (IOException resetException) {
+                    if (firstException != null) {
+                        firstException.addSuppressed(resetException);
+                        throw firstException;
+                    }
+                    throw resetException;
+                }
+            }
         }
+        if (firstException != null) throw firstException;
         return this;
     }
 
@@ -317,7 +338,7 @@ public class UnixTerminal implements Terminal {
     }
 
     @Override
-    public WindowSize getTerminalSize() throws RuntimeException {
+    public WindowSize getTerminalSize() throws IOException {
         final PosixLibC.WinSize winSize = new PosixLibC.WinSize();
         int returnCode;
         try {
@@ -325,33 +346,57 @@ public class UnixTerminal implements Terminal {
                     Platform.isMac() ? PosixLibC.TIOCGWINSZ_DARWIN : PosixLibC.TIOCGWINSZ,
                     winSize);
         } catch (LastErrorException e) {
-            returnCode = -1;
+            throw new IOException("Can't determine window size; JNA call failed", e);
         }
         if (returnCode != 0) {
-            throw new RuntimeException(String.format("Can't determine window size; ioctl failed with return code [%d]",
+            throw new IOException(String.format("Can't determine window size; ioctl failed with return code [%d]",
                     returnCode));
         }
-        return new WindowSize(winSize.ws_row, winSize.ws_col);
+        return new WindowSize(
+                Short.toUnsignedInt(winSize.ws_row),
+                Short.toUnsignedInt(winSize.ws_col)
+        );
     }
 
     @Override
     public synchronized boolean hasColor() throws IOException {
-        return getColors() != -1;
+        return getColors() > 0;
     }
 
     @Override
     public synchronized int getColors() throws IOException {
-        int colors;
+        if (colors >= 0) return colors;
+        if (colors == COLORS_UNAVAILABLE) return COLORS_UNAVAILABLE;
+        int detectedColors = COLORS_UNAVAILABLE;
         Process p = new ProcessBuilder("tput", "colors").start();
-        BufferedReader stdIn = new BufferedReader(new InputStreamReader(p.getInputStream()));
-        String s = stdIn.readLine();
-        stdIn.close();
         try {
-            colors = Integer.parseInt(s);
-        } catch (NumberFormatException e) {
-            colors = -1;
+            if (!p.waitFor(COLOR_DETECTION_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+                p.destroyForcibly();
+                this.colors = detectedColors;
+                return detectedColors;
+            }
+            BufferedReader stdIn = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            if (p.exitValue() != 0) {
+                stdIn.close();
+                this.colors = detectedColors;
+                return detectedColors;
+            }
+            String s = stdIn.readLine();
+            stdIn.close();
+            try {
+                detectedColors = Integer.parseInt(s);
+            } catch (NumberFormatException e) {
+                this.colors = detectedColors;
+                return detectedColors;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            p.destroyForcibly();
+            throw new IOException("Interrupted while detecting terminal colors", e);
         }
-        return colors;
+        if (detectedColors < 0) detectedColors = COLORS_UNAVAILABLE;
+        this.colors = detectedColors;
+        return detectedColors;
     }
 
     /**
@@ -420,11 +465,8 @@ public class UnixTerminal implements Terminal {
                 }
             }
         } catch (Exception e) {
-            lib.signal(PosixLibC.SIGWINCH, new PosixLibC.sig_t() {
-                public synchronized void invoke(int signal) {
-                    r.run();
-                }
-            });
+            winchHandler = signal -> r.run();
+            lib.signal(PosixLibC.SIGWINCH, winchHandler);
         }
     }
 
@@ -456,7 +498,11 @@ public class UnixTerminal implements Terminal {
     }
 
     private synchronized byte[] convertCharset(char c) {
-        return charset.encode(Character.toString(c)).array();
+        return Character.toString(c).getBytes(charset);
+    }
+
+    private synchronized byte[] convertCharset(String s) {
+        return s.getBytes(charset);
     }
 
     private boolean isTTY() {
