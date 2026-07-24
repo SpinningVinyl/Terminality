@@ -165,12 +165,49 @@ public interface Terminal extends AutoCloseable {
     boolean hasColor() throws IOException;
 
     /**
+     * Checks whether the terminal supports color output.
+     *
+     * <p>If {@code force} is {@code true}, implementations that cache an
+     * unsuccessful color-detection result should retry detection. Successfully
+     * detected capabilities may remain cached.</p>
+     *
+     * <p>The default implementation preserves compatibility with implementations
+     * that do not cache color detection.</p>
+     *
+     * @param force whether to retry a previously unsuccessful detection
+     * @return {@code true} if the terminal supports color
+     * @throws IOException if there is an error when detecting color support
+     */
+    default boolean hasColor(boolean force) throws IOException {
+        return force ? getColors(true) > 0 : hasColor();
+    }
+
+    /**
      * Returns the number of colors that the terminal supports.
      * @return the number of colors that the terminal supports or -1 if color
      * detection fails.
      * @throws IOException if there is an error when detecting color support.
      */
     int getColors() throws IOException;
+
+    /**
+     * Returns the number of colors that the terminal supports.
+     *
+     * <p>If {@code force} is {@code true}, implementations that cache an
+     * unsuccessful color-detection result should retry detection. Successfully
+     * detected capabilities may remain cached.</p>
+     *
+     * <p>The default implementation preserves compatibility with implementations
+     * that do not cache color detection.</p>
+     *
+     * @param force whether to retry a previously unsuccessful detection
+     * @return the number of colors that the terminal supports or -1 if color
+     * detection fails
+     * @throws IOException if there is an error when detecting color support
+     */
+    default int getColors(boolean force) throws IOException {
+        return getColors();
+    }
 
     /**
      * Reports whether a successful call to {@link #getTerminalSize()} detected dimensions different from the
