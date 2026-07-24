@@ -378,15 +378,25 @@ public class UnixTerminal implements Terminal {
 
     @Override
     public synchronized boolean hasColor() throws IOException {
-        return getColors() > 0;
+        return hasColor(false);
+    }
+
+    @Override
+    public synchronized boolean hasColor(boolean force) throws IOException {
+        return getColors(force) > 0;
     }
 
     @Override
     public synchronized int getColors() throws IOException {
+        return getColors(false);
+    }
+
+    @Override
+    public synchronized int getColors(boolean force) throws IOException {
         if (colors >= 0) return colors;
-        if (colors == COLORS_UNAVAILABLE) return COLORS_UNAVAILABLE;
+        if (colors == COLORS_UNAVAILABLE && !force) return COLORS_UNAVAILABLE;
         int detectedColors = COLORS_UNAVAILABLE;
-        Process p = new ProcessBuilder("tput", "colors").start();
+        Process p = startColorDetectionProcess();
         try {
             if (!p.waitFor(COLOR_DETECTION_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
                 p.destroyForcibly();
@@ -516,6 +526,10 @@ public class UnixTerminal implements Terminal {
 
     private boolean isTTY() {
         return lib.isatty(PosixLibC.STDIN_FD) == 1;
+    }
+
+    Process startColorDetectionProcess() throws IOException {
+        return new ProcessBuilder("tput", "colors").start();
     }
 
     private void startAsyncKeyboardReader() {
