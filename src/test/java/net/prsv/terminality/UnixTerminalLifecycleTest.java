@@ -438,5 +438,10 @@ class UnixTerminalLifecycleTest {
             return 1;
         }
 
+        @Override
+        public int poll(PollFd descriptors, NfdsT count, int timeoutMillis) {
+            return 0;
+        }
+
     }
 }

@@ -28,6 +28,7 @@ final class UTKeyReader {
     private final Charset charset;
     private final long escapeTimeoutNanos;
     private final LongSupplier nanoTime;
+    private final InputStatusProbe inputStatusProbe;
     private final Deque<Byte> bytes = new ArrayDeque<>();
     private final Deque<KeyStroke> decodedKeyStrokes = new ArrayDeque<>();
 
@@ -36,10 +37,19 @@ final class UTKeyReader {
     private boolean eofDelivered;
 
     UTKeyReader(InputStream input, Charset charset) {
-        this(input, charset, DEFAULT_ESCAPE_TIMEOUT_NANOS, System::nanoTime);
+        this(input, charset, DEFAULT_ESCAPE_TIMEOUT_NANOS, System::nanoTime, null);
+    }
+
+    UTKeyReader(InputStream input, Charset charset, InputStatusProbe inputStatusProbe) {
+        this(input, charset, DEFAULT_ESCAPE_TIMEOUT_NANOS, System::nanoTime, inputStatusProbe);
     }
 
     UTKeyReader(InputStream input, Charset charset, long escapeTimeoutNanos, LongSupplier nanoTime) {
+        this(input, charset, escapeTimeoutNanos, nanoTime, null);
+    }
+
+    UTKeyReader(InputStream input, Charset charset, long escapeTimeoutNanos, LongSupplier nanoTime,
+                InputStatusProbe inputStatusProbe) {
         if (input == null) {
             throw new NullPointerException("input");
         }
@@ -56,6 +66,7 @@ final class UTKeyReader {
         this.charset = charset;
         this.escapeTimeoutNanos = escapeTimeoutNanos;
         this.nanoTime = nanoTime;
+        this.inputStatusProbe = inputStatusProbe;
     }
 
     synchronized KeyStroke readKey(boolean blocking) throws IOException {
@@ -115,7 +126,7 @@ final class UTKeyReader {
                 if (bytes.size() > sizeBeforeFill) {
                     continue;
                 }
-                if (escapeTimedOut()) {
+                if (eof || escapeTimedOut()) {
                     return emitTimedOutEscape();
                 }
                 if (!blocking) {
@@ -146,12 +157,12 @@ final class UTKeyReader {
             if (bytes.size() > sizeBeforeFill) {
                 continue;
             }
-            if (!blocking) {
-                return null;
-            }
             if (eof || bytes.size() >= MAX_CHARACTER_BYTES) {
                 consume(1);
                 return KeyStroke.character('\ufffd', false, false);
+            }
+            if (!blocking) {
+                return null;
             }
             readOneBlocking();
         }
@@ -443,7 +454,18 @@ final class UTKeyReader {
         while (!eof) {
             int available = input.available();
             if (available <= 0) {
-                return;
+                if (inputStatusProbe == null) {
+                    return;
+                }
+                InputStatus status = inputStatusProbe.poll();
+                if (status == InputStatus.EOF) {
+                    eof = true;
+                    return;
+                }
+                if (status == InputStatus.UNAVAILABLE) {
+                    return;
+                }
+                available = 1;
             }
             byte[] inputBytes = new byte[Math.min(available, 1024)];
             int count = input.read(inputBytes);
@@ -528,6 +550,17 @@ final class UTKeyReader {
 
     private static int unsigned(Byte value) {
         return value & 0xff;
+    }
+
+    enum InputStatus {
+        DATA,
+        EOF,
+        UNAVAILABLE
+    }
+
+    @FunctionalInterface
+    interface InputStatusProbe {
+        InputStatus poll() throws IOException;
     }
 
     private enum ParseStatus {

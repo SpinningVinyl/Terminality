@@ -95,10 +95,12 @@ public class UnixTerminal implements Terminal {
     }
 
     UnixTerminal(InputStream in, OutputStream out, Charset charset, boolean asyncIO, PosixLibC lib) {
-        keyReader = new UTKeyReader(in, charset);
+        this.lib = lib;
+        keyReader = in == System.in
+                ? new UTKeyReader(in, charset, new PosixInputProbe(lib, PosixLibC.STDIN_FD))
+                : new UTKeyReader(in, charset);
         output = new BufferedOutputStream(out);
         this.charset = charset;
-        this.lib = lib;
         if (asyncIO) {
             keyQueue = new ArrayBlockingQueue<>(KEY_QUEUE_CAPACITY);
             asyncKeyboardFailure = new AtomicReference<>();

@@ -77,6 +77,22 @@ class PosixLibCTest {
     }
 
     @Test
+    void pollFdMatchesPosixMemoryLayout() {
+        InspectablePollFd descriptor = new InspectablePollFd();
+
+        assertEquals(8, descriptor.size());
+        assertEquals(0, descriptor.offsetOf("fd"));
+        assertEquals(4, descriptor.offsetOf("events"));
+        assertEquals(6, descriptor.offsetOf("revents"));
+    }
+
+    @Test
+    void pollAcceptsNfdsTArgument() {
+        assertEquals(0, PosixLibC.INSTANCE.poll(
+                new PosixLibC.PollFd(), new PosixLibC.NfdsT(0), 0));
+    }
+
+    @Test
     void linuxTermiosCopyPreservesEveryNativeField() {
         PosixLibC.LinuxTermios original = new PosixLibC.LinuxTermios();
         original.c_iflag = 1;
@@ -150,6 +166,12 @@ class PosixLibCTest {
     }
 
     private static final class InspectableDarwinTermios extends PosixLibC.DarwinTermios {
+        int offsetOf(String fieldName) {
+            return fieldOffset(fieldName);
+        }
+    }
+
+    private static final class InspectablePollFd extends PosixLibC.PollFd {
         int offsetOf(String fieldName) {
             return fieldOffset(fieldName);
         }

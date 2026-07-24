@@ -20,6 +20,13 @@ import com.sun.jna.*;
 
 import java.util.Arrays;
 
+/**
+ * Low-level native bindings used internally by Terminality.
+ *
+ * <p>Direct use of these bindings is discouraged. Their API follows the
+ * requirements of Terminality's implementation and is not a general-purpose
+ * POSIX interface.</p>
+ */
 @SuppressWarnings("unused")
 public interface PosixLibC extends Library {
 
@@ -47,6 +54,15 @@ public interface PosixLibC extends Library {
     int TIOCGWINSZ  = 0x5413;
     int TIOCGWINSZ_DARWIN = 0x40087468;
 
+    // poll() events (identical on Linux and macOS)
+    short POLLIN    = 0x0001;
+    short POLLERR   = 0x0008;
+    short POLLHUP   = 0x0010;
+    short POLLNVAL  = 0x0020;
+
+    // errno values (identical on Linux and macOS)
+    int EINTR       = 4;
+
     PosixLibC INSTANCE = Native.load("c", PosixLibC.class);
 
     @Structure.FieldOrder(value = {"ws_row", "ws_col", "ws_xpixel", "ws_ypixel"})
@@ -54,6 +70,24 @@ public interface PosixLibC extends Library {
         public short ws_row, ws_col, ws_xpixel, ws_ypixel;
     }
 
+    @Structure.FieldOrder(value = {"fd", "events", "revents"})
+    class PollFd extends Structure {
+        public int fd;
+        public short events;
+        public short revents;
+    }
+
+    class NfdsT extends IntegerType {
+        private static final int SIZE = Platform.isMac() ? Integer.BYTES : Native.LONG_SIZE;
+
+        public NfdsT() {
+            this(0);
+        }
+
+        public NfdsT(long value) {
+            super(SIZE, value, true);
+        }
+    }
 
     abstract class Termios extends Structure {
 
@@ -230,5 +264,19 @@ public interface PosixLibC extends Library {
     int ioctl(int fd, int opt, WinSize winsize) throws LastErrorException;
 
     int isatty(int fd);
+
+    /**
+     * Polls one file descriptor.
+     *
+     * <p>This binding provides storage for exactly one {@link PollFd}, so
+     * {@code count} must always be {@code 0} or {@code 1}. Passing a larger
+     * value may cause native code to read beyond the supplied structure.</p>
+     *
+     * @param descriptors the single descriptor to poll
+     * @param count the descriptor count; must be {@code 0} or {@code 1}
+     * @param timeoutMillis timeout in milliseconds
+     * @return the result returned by the native {@code poll()} function
+     */
+    int poll(PollFd descriptors, NfdsT count, int timeoutMillis) throws LastErrorException;
 
 }
