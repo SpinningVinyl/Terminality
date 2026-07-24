@@ -313,9 +313,7 @@ public class UnixTerminal implements Terminal {
      */
     @Override
     public boolean sizeChanged() {
-        boolean result = sizeChange.getAcquire();
-        sizeChange.setRelease(false);
-        return result;
+        return sizeChange.getAndSet(false);
     }
 
     @Override
