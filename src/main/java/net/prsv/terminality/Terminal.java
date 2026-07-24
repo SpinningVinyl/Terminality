@@ -21,7 +21,9 @@ import java.io.IOException;
 public interface Terminal extends AutoCloseable {
 
     /**
-     * Returns the size of the terminal window.
+     * Returns the size of the terminal window. Each successful call caches the returned dimensions for
+     * {@link #sizeChanged()}.
+     *
      * @return {@code Terminal.WindowSize} object containing size of the terminal window
      * @throws IOException if there is an error calling native functions
      */
@@ -171,9 +173,12 @@ public interface Terminal extends AutoCloseable {
     int getColors() throws IOException;
 
     /**
-     * Checks whether the size of the terminal window has changed since the last time this method was invoked.
-     * Subsequent calls to this method will return {@code false} until the terminal window is resized again.
-     * @return {@code true} if the size of the terminal window has changed since the last time this method was invoked
+     * Reports whether a successful call to {@link #getTerminalSize()} detected dimensions different from the
+     * previously cached dimensions. The initial value is {@code true}, allowing callers to perform their initial
+     * layout. Reading this value consumes the notification, so subsequent calls return {@code false} until a later
+     * size query detects a change.
+     *
+     * @return {@code true} if initial layout is pending or a size change has been detected
      */
     boolean sizeChanged();
 

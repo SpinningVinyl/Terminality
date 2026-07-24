@@ -47,9 +47,6 @@ public interface PosixLibC extends Library {
     int TIOCGWINSZ  = 0x5413;
     int TIOCGWINSZ_DARWIN = 0x40087468;
 
-    // this signal lets the application know that the terminal size has changed
-    int SIGWINCH = 28;
-
     PosixLibC INSTANCE = Native.load("c", PosixLibC.class);
 
     @Structure.FieldOrder(value = {"ws_row", "ws_col", "ws_xpixel", "ws_ypixel"})
@@ -225,11 +222,6 @@ public interface PosixLibC extends Library {
         }
     }
 
-    interface sig_t extends Callback {
-        void invoke(int signal);
-    }
-
-
     int tcgetattr(int fd, Termios termios) throws LastErrorException;
 
     int tcsetattr(int fd, int optional_actions,
@@ -238,7 +230,5 @@ public interface PosixLibC extends Library {
     int ioctl(int fd, int opt, WinSize winsize) throws LastErrorException;
 
     int isatty(int fd);
-
-    sig_t signal(int sig, sig_t fn);
 
 }
