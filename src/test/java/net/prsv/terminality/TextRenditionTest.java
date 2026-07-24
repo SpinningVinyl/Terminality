@@ -7,8 +7,16 @@ import java.lang.reflect.Modifier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TextRenditionTest {
+
+    @Test
+    void rejectsAnEmptyEffectiveAttributeList() {
+        assertThrows(IllegalArgumentException.class, TextRendition::new);
+        assertThrows(IllegalArgumentException.class,
+                () -> new TextRendition("", " "));
+    }
 
     @Test
     void colorConstantsDoNotResetUnrelatedAttributes() {

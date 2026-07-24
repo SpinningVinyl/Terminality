@@ -99,13 +99,17 @@ public class TextRendition {
     private final String sequence;
 
     public TextRendition(String... attributes) {
+        if (attributes.length == 0) throw new IllegalArgumentException("At least one argument needed");
+        boolean nonBlank = false;
         StringBuilder sb = new StringBuilder(PREFIX);
         for (String attribute : attributes) {
             if (attribute.isBlank()) {
                 continue;
             }
+            nonBlank = true;
             sb.append(attribute).append(SEPARATOR);
         }
+        if (!nonBlank) throw new IllegalArgumentException("At least one non-blank argument needed");
         sb.append(POSTFIX);
         sequence = sb.toString().replace(SEPARATOR + POSTFIX, POSTFIX);
     }
