@@ -45,7 +45,7 @@ KeyStroke ks = t.readKey(true);
 
 Conversely, calling ~readKey(false)~ or without any parameters reads the keyboard in the non-blocking manner. In this case, the method returns ~null~ if the user has not pressed any keys.
 
-To use asynchronous keyboard input, instantiate the terminal object with the ~asyncIO~ parameter set to ~true~. Asynchronous input is always non-blocking.
+To use asynchronous keyboard input, instantiate the terminal as ~new UnixTerminal(true)~. Asynchronous input is always non-blocking.
 
 ** Controlling the cursor
 Use the ~setCursorVisibility()~ method to control the visibility of the cursor:
@@ -126,9 +126,7 @@ int cols = ws.columns;
 int rows = ws.rows;
 #+end_src
 
-When you create a new ~UnixTerminal~ object, by default the constructor tries to register a handler for the SIGWINCH signal (the OS sends this signal to an app when the size of the terminal window changes). If the terminal is handling SIGWINCH itself, you can query whether the size of the terminal has changed using the ~sizeChanged()~ method. Subsequent calls to this method will return ~false~ until the terminal window is resized again.
-
-You can disable this functionality by calling the constructor with the ~handleSigwinch~ parameter set to ~false~ (for example, if you want to implement your own handler using the unsupported ~sun.misc.Signal~ API). Alternatively, you can simply call ~getTerminalSize()~ on every iteration of your main application loop.
+Each successful call to ~getTerminalSize()~ caches the returned dimensions. The ~sizeChanged()~ method returns ~true~ when the most recent size query detected dimensions different from the cached value, and consumes that notification. Its initial value is ~true~ so that an application can perform its initial layout. To detect later changes, call ~getTerminalSize()~ before ~sizeChanged()~ in each iteration of the application loop. Terminality does not install a SIGWINCH handler.
 
 ** Example
 See ~BouncyBall.java~ in ~src/main/java/net/prsv/terminality/example~.

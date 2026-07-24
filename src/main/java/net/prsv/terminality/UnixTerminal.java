@@ -20,8 +20,6 @@ import com.sun.jna.LastErrorException;
 import com.sun.jna.Platform;
 
 import java.io.*;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -45,15 +43,14 @@ public class UnixTerminal implements Terminal {
     private final BufferedOutputStream output;
     private final Charset charset;
 
-    private final TerminalResizeListener resizeListener;
-
     private final AtomicBoolean sizeChange = new AtomicBoolean(true);
-
-    private final boolean handleWinch;
+    private WindowSize cachedTerminalSize;
 
     private volatile boolean isInitialized = false;
+    private boolean restorationPending = false;
 
     private boolean shutdownHookRegistered = false;
+    private Thread shutdownHook;
 
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
@@ -63,35 +60,45 @@ public class UnixTerminal implements Terminal {
     private final BlockingQueue<KeyStroke> keyQueue;
     private final AtomicReference<IOException> asyncKeyboardFailure;
     private volatile Thread asyncKeyboardReader;
-    private PosixLibC.sig_t winchHandler;
     private int colors = COLORS_UNKNOWN;
 
 //  ===================== C O N S T R U C T O R S ======================
 
     public UnixTerminal() {
-        this(true, false);
+        this(false);
     }
 
+    public UnixTerminal(boolean asyncIO) {
+        this(System.in, System.out, DEFAULT_CHARSET, asyncIO);
+    }
+
+    /**
+     * @deprecated Terminality no longer installs a SIGWINCH handler. Use
+     * {@link #UnixTerminal(boolean)} and pass only the asynchronous-I/O setting.
+     */
+    @Deprecated
     public UnixTerminal(boolean handleSigwinch, boolean asyncIO) {
-        this(System.in, System.out, DEFAULT_CHARSET, handleSigwinch, asyncIO);
+        this(asyncIO);
     }
 
+    public UnixTerminal(InputStream in, OutputStream out, Charset charset, boolean asyncIO) {
+        this(in, out, charset, asyncIO, PosixLibC.INSTANCE);
+    }
+
+    /**
+     * @deprecated Terminality no longer installs a SIGWINCH handler. Use
+     * {@link #UnixTerminal(InputStream, OutputStream, Charset, boolean)}.
+     */
+    @Deprecated
     public UnixTerminal(InputStream in, OutputStream out, Charset charset, boolean handleSigwinch, boolean asyncIO) {
-        this(in, out, charset, handleSigwinch, asyncIO, PosixLibC.INSTANCE);
+        this(in, out, charset, asyncIO);
     }
 
-    UnixTerminal(InputStream in, OutputStream out, Charset charset, boolean handleSigwinch, boolean asyncIO,
-                 PosixLibC lib) {
+    UnixTerminal(InputStream in, OutputStream out, Charset charset, boolean asyncIO, PosixLibC lib) {
         keyReader = new UTKeyReader(in, charset);
         output = new BufferedOutputStream(out);
         this.charset = charset;
         this.lib = lib;
-        handleWinch = handleSigwinch;
-        if (handleWinch) {
-            resizeListener = new TerminalResizeListener();
-        } else {
-            resizeListener = null;
-        }
         if (asyncIO) {
             keyQueue = new ArrayBlockingQueue<>(KEY_QUEUE_CAPACITY);
             asyncKeyboardFailure = new AtomicReference<>();
@@ -108,6 +115,9 @@ public class UnixTerminal implements Terminal {
     public synchronized UnixTerminal begin() throws IOException, RuntimeException {
         if (isInitialized) {
             return this;
+        }
+        if (restorationPending) {
+            throw new IOException("Cannot initialize: terminal state restoration is pending");
         }
         if (asyncKeyboardReader != null) {
             if (asyncKeyboardReader.isAlive()) {
@@ -132,18 +142,15 @@ public class UnixTerminal implements Terminal {
         termios.c_cc[PosixLibC.VMIN] = 0;
         termios.c_cc[PosixLibC.VTIME] = 0; */
         try {
+            keyReader.reset();
+            originalState = savedState;
             if (!shutdownHookRegistered) {
                 registerShutdownHook();
                 shutdownHookRegistered = true;
             }
-            if (handleWinch) {
-                registerResizeListener(resizeListener);
-            }
             setTerminalAttrs(termios);
-            keyReader.reset();
-            originalState = savedState;
-            isInitialized = true;
             startAsyncKeyboardReader();
+            isInitialized = true;
             return this;
         } catch (IOException | RuntimeException | Error initializationFailure) {
             try {
@@ -153,10 +160,13 @@ public class UnixTerminal implements Terminal {
             }
             try {
                 setTerminalAttrs(savedState);
+                originalState = null;
+                restorationPending = false;
+                removeShutdownHook();
             } catch (IOException restorationFailure) {
+                restorationPending = true;
                 initializationFailure.addSuppressed(restorationFailure);
             }
-            originalState = null;
             isInitialized = false;
             throw initializationFailure;
         }
@@ -164,10 +174,10 @@ public class UnixTerminal implements Terminal {
 
     @Override
     public synchronized void end() throws IOException {
-        if (!isInitialized) {
+        if (!isInitialized && !restorationPending) {
             return;
         }
-
+        boolean fullyInitialized = isInitialized;
         IOException failure = null;
         boolean stateRestored = false;
         try {
@@ -176,11 +186,13 @@ public class UnixTerminal implements Terminal {
             failure = readerFailure;
         }
         try {
-            resetTextRendition(); // reset FG and BG color
-            clear();
-            setCursorVisibility(true);
-            writeControlSequence((byte) 'H'); // reset the cursor position
-            flush();
+            if (fullyInitialized) {
+                resetTextRendition(); // reset FG and BG color
+                clear();
+                setCursorVisibility(true);
+                writeControlSequence((byte) 'H'); // reset the cursor position
+                flush();
+            }
         } catch (IOException outputFailure) {
             if (failure == null) {
                 failure = outputFailure;
@@ -201,6 +213,8 @@ public class UnixTerminal implements Terminal {
             if (stateRestored) {
                 originalState = null;
                 isInitialized = false;
+                restorationPending = false;
+                removeShutdownHook();
             }
         }
 
@@ -327,18 +341,13 @@ public class UnixTerminal implements Terminal {
         return this;
     }
 
-    /**
-     * See {@link Terminal#sizeChanged()}. Only works as intended if {@code UnixTerminal} was instantiated with
-     * {@code handleSigwinch == true}.
-     * @return {@code true} if the size of the terminal window has changed since the last time this method was invoked
-     */
     @Override
     public boolean sizeChanged() {
         return sizeChange.getAndSet(false);
     }
 
     @Override
-    public WindowSize getTerminalSize() throws IOException {
+    public synchronized WindowSize getTerminalSize() throws IOException {
         final PosixLibC.WinSize winSize = new PosixLibC.WinSize();
         int returnCode;
         try {
@@ -352,10 +361,17 @@ public class UnixTerminal implements Terminal {
             throw new IOException(String.format("Can't determine window size; ioctl failed with return code [%d]",
                     returnCode));
         }
-        return new WindowSize(
+        WindowSize currentSize = new WindowSize(
                 Short.toUnsignedInt(winSize.ws_row),
                 Short.toUnsignedInt(winSize.ws_col)
         );
+        WindowSize previousSize = cachedTerminalSize;
+        cachedTerminalSize = currentSize;
+        if (previousSize != null
+                && (currentSize.rows != previousSize.rows || currentSize.columns != previousSize.columns)) {
+            sizeChange.set(true);
+        }
+        return currentSize;
     }
 
     @Override
@@ -441,45 +457,36 @@ public class UnixTerminal implements Terminal {
         }
     }
 
-    // register a Runnable that will be invoked whenever the app receives signal 28 (SIGWINCH)
-    private void registerResizeListener(final Runnable r) throws IOException {
-        /* First try to register the listener using the sun.misc.Signal API,
-           if it fails -- use the native interface defined in PosixLibC.
-           I have found that the listener attached using the native interface
-           just randomly stops firing sometimes, sun.misc.Signal seems to be
-           a bit more reliable (as it should be because the JVM uses it to
-           process the signals itself)
-         */
-        try {
-            Class<?> signalClass = Class.forName("sun.misc.Signal");
-            for (Method signalClassMethod : signalClass.getDeclaredMethods()) {
-                if (signalClassMethod.getName().equals("handle")) {
-                    Object resizeHandler = Proxy.newProxyInstance(getClass().getClassLoader(),
-                            new Class[]{Class.forName("sun.misc.SignalHandler")}, (proxy, method, args) -> {
-                                if(method.getName().equals("handle")) {
-                                    r.run();
-                                }
-                                return null;
-                            });
-                    signalClassMethod.invoke(null, signalClass.getConstructor(String.class).newInstance("WINCH"), resizeHandler);
-                }
-            }
-        } catch (Exception e) {
-            winchHandler = signal -> r.run();
-            lib.signal(PosixLibC.SIGWINCH, winchHandler);
-        }
-    }
-
-
     // try to leave the console in a usable state if the process is terminated
     private void registerShutdownHook() {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+        shutdownHook = new Thread(() -> {
             try {
                 end();
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-        }));
+        });
+        Runtime.getRuntime().addShutdownHook(shutdownHook);
+    }
+
+    private void removeShutdownHook() {
+        Thread hook = shutdownHook;
+        if (hook == null) {
+            shutdownHookRegistered = false;
+            return;
+        }
+        if (Thread.currentThread() == hook) {
+            shutdownHookRegistered = false;
+            shutdownHook = null;
+            return;
+        }
+        try {
+            Runtime.getRuntime().removeShutdownHook(hook);
+            shutdownHookRegistered = false;
+            shutdownHook = null;
+        } catch (IllegalStateException | SecurityException ignored) {
+            // JVM shutdown has started, or hook removal is not permitted.
+        }
     }
 
     private void writeControlSequence(byte... bytes) throws IOException {
@@ -564,12 +571,6 @@ public class UnixTerminal implements Terminal {
             throw new IOException("Asynchronous keyboard reader did not stop");
         }
         asyncKeyboardReader = null;
-    }
-
-    private class TerminalResizeListener implements Runnable {
-        public void run() {
-            sizeChange.setRelease(true);
-        }
     }
 
 }

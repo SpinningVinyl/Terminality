@@ -121,6 +121,89 @@ class UnixTerminalLifecycleTest {
     }
 
     @Test
+    void shutdownHookIsRemovedAndRecreatedWithTheTerminalLifecycle() throws Exception {
+        UnixTerminal terminal = terminal(new FakePosixLibC(), new ByteArrayOutputStream());
+
+        terminal.begin();
+        Thread firstHook = shutdownHook(terminal);
+        assertNotNull(firstHook);
+        assertTrue(shutdownHookRegistered(terminal));
+
+        terminal.end();
+        assertNull(shutdownHook(terminal));
+        assertFalse(shutdownHookRegistered(terminal));
+
+        terminal.begin();
+        Thread secondHook = shutdownHook(terminal);
+        assertNotNull(secondHook);
+        assertNotSame(firstHook, secondHook);
+
+        terminal.end();
+    }
+
+    @Test
+    void failedBeginRemovesItsShutdownHook() throws Exception {
+        FakePosixLibC libc = new FakePosixLibC();
+        libc.failNextSet = true;
+        UnixTerminal terminal = terminal(libc, new ByteArrayOutputStream());
+
+        assertThrows(IOException.class, terminal::begin);
+
+        assertNull(shutdownHook(terminal));
+        assertFalse(shutdownHookRegistered(terminal));
+    }
+
+    @Test
+    void failedBeginRollbackRemainsRecoverableWithoutBecomingInitialized() throws Exception {
+        FakePosixLibC libc = new FakePosixLibC();
+        libc.setFailuresRemaining = 2;
+        UnixTerminal terminal = new UnixTerminal(
+                new ByteArrayInputStream(new byte[0]),
+                new ByteArrayOutputStream(),
+                StandardCharsets.UTF_8,
+                false,
+                libc);
+
+        IOException initializationFailure = assertThrows(IOException.class, terminal::begin);
+
+        assertEquals(1, initializationFailure.getSuppressed().length);
+        assertTrue(restorationPending(terminal));
+        assertTrue(shutdownHookRegistered(terminal));
+        assertThrows(RuntimeException.class, terminal::readKey);
+        IOException reinitializationFailure = assertThrows(IOException.class, terminal::begin);
+        assertEquals("Cannot initialize: terminal state restoration is pending",
+                reinitializationFailure.getMessage());
+        terminal.end();
+
+        assertFalse(restorationPending(terminal));
+        assertFalse(shutdownHookRegistered(terminal));
+        assertNull(shutdownHook(terminal));
+        assertEquals(3, libc.localFlagsSet.size());
+        assertEquals(INITIAL_LOCAL_FLAGS, libc.localFlagsSet.get(2));
+
+        terminal.begin();
+        terminal.end();
+    }
+
+    @Test
+    void failedEndRetainsShutdownHookUntilTerminalRestorationSucceeds() throws Exception {
+        FakePosixLibC libc = new FakePosixLibC();
+        UnixTerminal terminal = terminal(libc, new ByteArrayOutputStream());
+
+        terminal.begin();
+        Thread hook = shutdownHook(terminal);
+        libc.failNextSet = true;
+
+        assertThrows(IOException.class, terminal::end);
+        assertEquals(hook, shutdownHook(terminal));
+        assertTrue(shutdownHookRegistered(terminal));
+
+        terminal.end();
+        assertNull(shutdownHook(terminal));
+        assertFalse(shutdownHookRegistered(terminal));
+    }
+
+    @Test
     void setTitleUsesOperatingSystemCommandSequence() throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         UnixTerminal terminal = terminal(new FakePosixLibC(), output);
@@ -128,6 +211,48 @@ class UnixTerminalLifecycleTest {
         terminal.setTitle("Terminality");
 
         assertEquals("\u001b]2;Terminality\u0007", output.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void terminalSizeQueriesCacheDimensionsAndReportChanges() throws IOException {
+        FakePosixLibC libc = new FakePosixLibC();
+        UnixTerminal terminal = terminal(libc, new ByteArrayOutputStream());
+
+        assertTrue(terminal.sizeChanged());
+        assertFalse(terminal.sizeChanged());
+
+        Terminal.WindowSize initialSize = terminal.getTerminalSize();
+        assertEquals(24, initialSize.rows);
+        assertEquals(80, initialSize.columns);
+        assertFalse(terminal.sizeChanged());
+
+        libc.terminalRows = 30;
+        libc.terminalColumns = 100;
+        Terminal.WindowSize resized = terminal.getTerminalSize();
+
+        assertEquals(30, resized.rows);
+        assertEquals(100, resized.columns);
+        assertTrue(terminal.sizeChanged());
+        assertFalse(terminal.sizeChanged());
+
+        terminal.getTerminalSize();
+        assertFalse(terminal.sizeChanged());
+    }
+
+    @Test
+    void failedTerminalSizeQueryDoesNotChangeCachedDimensions() throws IOException {
+        FakePosixLibC libc = new FakePosixLibC();
+        UnixTerminal terminal = terminal(libc, new ByteArrayOutputStream());
+        terminal.getTerminalSize();
+        terminal.sizeChanged();
+        libc.terminalRows = 30;
+        libc.failNextIoctl = true;
+
+        assertThrows(IOException.class, terminal::getTerminalSize);
+        assertFalse(terminal.sizeChanged());
+
+        terminal.getTerminalSize();
+        assertTrue(terminal.sizeChanged());
     }
 
     @Test
@@ -201,7 +326,7 @@ class UnixTerminalLifecycleTest {
 
     private static UnixTerminal terminal(FakePosixLibC libc, OutputStream output,
                                          InputStream input, boolean asyncIO) {
-        return new UnixTerminal(input, output, StandardCharsets.UTF_8, false, asyncIO, libc);
+        return new UnixTerminal(input, output, StandardCharsets.UTF_8, asyncIO, libc);
     }
 
     private static Thread asyncKeyboardReader(UnixTerminal terminal) throws ReflectiveOperationException {
@@ -215,6 +340,24 @@ class UnixTerminalLifecycleTest {
         Field field = UnixTerminal.class.getDeclaredField("asyncKeyboardReader");
         field.setAccessible(true);
         field.set(terminal, reader);
+    }
+
+    private static Thread shutdownHook(UnixTerminal terminal) throws ReflectiveOperationException {
+        Field field = UnixTerminal.class.getDeclaredField("shutdownHook");
+        field.setAccessible(true);
+        return (Thread) field.get(terminal);
+    }
+
+    private static boolean shutdownHookRegistered(UnixTerminal terminal) throws ReflectiveOperationException {
+        Field field = UnixTerminal.class.getDeclaredField("shutdownHookRegistered");
+        field.setAccessible(true);
+        return field.getBoolean(terminal);
+    }
+
+    private static boolean restorationPending(UnixTerminal terminal) throws ReflectiveOperationException {
+        Field field = UnixTerminal.class.getDeclaredField("restorationPending");
+        field.setAccessible(true);
+        return field.getBoolean(terminal);
     }
 
     private static IOException awaitReaderFailure(UnixTerminal terminal) throws Exception {
@@ -253,6 +396,10 @@ class UnixTerminalLifecycleTest {
         private final List<Long> localFlagsSet = new ArrayList<>();
         private long initialLocalFlags = INITIAL_LOCAL_FLAGS;
         private boolean failNextSet;
+        private int setFailuresRemaining;
+        private int terminalRows = 24;
+        private int terminalColumns = 80;
+        private boolean failNextIoctl;
 
         @Override
         public int tcgetattr(int fd, Termios termios) {
@@ -265,8 +412,11 @@ class UnixTerminalLifecycleTest {
         @Override
         public int tcsetattr(int fd, int optionalActions, Termios termios) {
             localFlagsSet.add(termios.getLocalFlags());
-            if (failNextSet) {
+            if (failNextSet || setFailuresRemaining > 0) {
                 failNextSet = false;
+                if (setFailuresRemaining > 0) {
+                    setFailuresRemaining--;
+                }
                 return -1;
             }
             return 0;
@@ -274,6 +424,12 @@ class UnixTerminalLifecycleTest {
 
         @Override
         public int ioctl(int fd, int opt, WinSize winsize) {
+            if (failNextIoctl) {
+                failNextIoctl = false;
+                return -1;
+            }
+            winsize.ws_row = (short) terminalRows;
+            winsize.ws_col = (short) terminalColumns;
             return 0;
         }
 
@@ -282,9 +438,5 @@ class UnixTerminalLifecycleTest {
             return 1;
         }
 
-        @Override
-        public sig_t signal(int sig, sig_t fn) {
-            return fn;
-        }
     }
 }
