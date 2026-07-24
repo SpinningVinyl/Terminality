@@ -25,15 +25,22 @@ public class TextRendition {
     private static final String SEPARATOR = ";";
     
     public static final TextRendition RESET_ALL = new TextRendition("0");
+
+    public static final TextRendition BOLD = new TextRendition("1");
+    public static final TextRendition NORMAL_INTENSITY = new TextRendition("22");
+    public static final TextRendition UNDERLINE = new TextRendition("4");
+    public static final TextRendition UNDERLINE_OFF = new TextRendition("24");
+    public static final TextRendition DEFAULT_FOREGROUND = new TextRendition("39");
+    public static final TextRendition DEFAULT_BACKGROUND = new TextRendition("49");
     
-    public static final TextRendition FG_BLACK = new TextRendition("0", "30");
-    public static final TextRendition FG_RED = new TextRendition("0", "31");
-    public static final TextRendition FG_GREEN = new TextRendition("0", "32");
-    public static final TextRendition FG_YELLOW = new TextRendition("0", "33");
-    public static final TextRendition FG_BLUE = new TextRendition("0", "34");
-    public static final TextRendition FG_PURPLE = new TextRendition("0", "35");
-    public static final TextRendition FG_CYAN = new TextRendition("0", "36");
-    public static final TextRendition FG_WHITE = new TextRendition("0", "37");
+    public static final TextRendition FG_BLACK = new TextRendition("30");
+    public static final TextRendition FG_RED = new TextRendition("31");
+    public static final TextRendition FG_GREEN = new TextRendition("32");
+    public static final TextRendition FG_YELLOW = new TextRendition("33");
+    public static final TextRendition FG_BLUE = new TextRendition("34");
+    public static final TextRendition FG_PURPLE = new TextRendition("35");
+    public static final TextRendition FG_CYAN = new TextRendition("36");
+    public static final TextRendition FG_WHITE = new TextRendition("37");
 
     public static final TextRendition FG_BLACK_BOLD = new TextRendition("1", "30");
     public static final TextRendition FG_RED_BOLD = new TextRendition("1", "31");
@@ -53,14 +60,14 @@ public class TextRendition {
     public static final TextRendition FG_CYAN_UNDERLINE = new TextRendition("4", "36");
     public static final TextRendition FG_WHITE_UNDERLINE = new TextRendition("4", "37");
 
-    public static final TextRendition FG_BLACK_INTENSE = new TextRendition("0", "90");
-    public static final TextRendition FG_RED_INTENSE = new TextRendition("0", "91");
-    public static final TextRendition FG_GREEN_INTENSE = new TextRendition("0", "92");
-    public static final TextRendition FG_YELLOW_INTENSE = new TextRendition("0", "93");
-    public static final TextRendition FG_BLUE_INTENSE = new TextRendition("0", "94");
-    public static final TextRendition FG_PURPLE_INTENSE = new TextRendition("0", "95");
-    public static final TextRendition FG_CYAN_INTENSE = new TextRendition("0", "96");
-    public static final TextRendition FG_WHITE_INTENSE = new TextRendition("0", "97");
+    public static final TextRendition FG_BLACK_INTENSE = new TextRendition("90");
+    public static final TextRendition FG_RED_INTENSE = new TextRendition("91");
+    public static final TextRendition FG_GREEN_INTENSE = new TextRendition("92");
+    public static final TextRendition FG_YELLOW_INTENSE = new TextRendition("93");
+    public static final TextRendition FG_BLUE_INTENSE = new TextRendition("94");
+    public static final TextRendition FG_PURPLE_INTENSE = new TextRendition("95");
+    public static final TextRendition FG_CYAN_INTENSE = new TextRendition("96");
+    public static final TextRendition FG_WHITE_INTENSE = new TextRendition("97");
 
     public static final TextRendition FG_BLACK_BOLD_INTENSE = new TextRendition("1", "90");
     public static final TextRendition FG_RED_BOLD_INTENSE = new TextRendition("1", "91");
@@ -80,14 +87,14 @@ public class TextRendition {
     public static final TextRendition BG_CYAN = new TextRendition("46");
     public static final TextRendition BG_WHITE = new TextRendition("47");
     
-    public static final TextRendition BG_BLACK_INTENSE = new TextRendition("0", "100");
-    public static final TextRendition BG_RED_INTENSE = new TextRendition("0", "101");
-    public static final TextRendition BG_GREEN_INTENSE = new TextRendition("0", "102");
-    public static final TextRendition BG_YELLOW_INTENSE = new TextRendition("0", "103");
-    public static final TextRendition BG_BLUE_INTENSE = new TextRendition("0", "104");
-    public static final TextRendition BG_PURPLE_INTENSE = new TextRendition("0", "105");
-    public static final TextRendition BG_CYAN_INTENSE = new TextRendition("0", "106");
-    public static final TextRendition BG_WHITE_INTENSE = new TextRendition("0", "107");
+    public static final TextRendition BG_BLACK_INTENSE = new TextRendition("100");
+    public static final TextRendition BG_RED_INTENSE = new TextRendition("101");
+    public static final TextRendition BG_GREEN_INTENSE = new TextRendition("102");
+    public static final TextRendition BG_YELLOW_INTENSE = new TextRendition("103");
+    public static final TextRendition BG_BLUE_INTENSE = new TextRendition("104");
+    public static final TextRendition BG_PURPLE_INTENSE = new TextRendition("105");
+    public static final TextRendition BG_CYAN_INTENSE = new TextRendition("106");
+    public static final TextRendition BG_WHITE_INTENSE = new TextRendition("107");
     
     private final String sequence;
 
