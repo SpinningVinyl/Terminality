@@ -6,29 +6,37 @@ import java.io.IOException;
 
 public class KeyStrokeDemo {
 
+    private static final String INSTRUCTIONS = "Press any key combination to show details, [Ctrl+q] to quit.";
+
     public static void main(String[] args) throws IOException {
-        UnixTerminal t = new UnixTerminal();
-        t.begin()
-                .clear()
-                .setCursorVisibility(false)
-                .setCursorPosition(5,5)
-                .put("Press any key combination to show keystroke details, [Ctrl+q] to quit.")
-                .flush();
-
-        KeyStroke ks;
-        boolean quit = false;
-
-        while (!quit) {
-            ks = t.readKey(true); // blocking keyboard input
-            if (ks.type == KeyType.CHARACTER && ks.c == 'q' && ks.ctrl) {
-                quit = true;
-            }
-            t.clear()
-                    .setCursorPosition(5, 5)
-                    .put(ks.toString())
+        try (UnixTerminal t = new UnixTerminal()) {
+            t.begin()
+                    .clear()
+                    .setCursorVisibility(false)
+                    .setCursorPosition(1, 1)
+                    .put(INSTRUCTIONS)
                     .flush();
+            t.setTitle("KeyStroke Demo");
+            KeyStroke ks;
+
+            while (true) {
+                ks = t.readKey(true); // blocking keyboard input
+                if (shouldQuit(ks)) break;
+                t.clear()
+                        .setCursorPosition(1, 1)
+                        .put(INSTRUCTIONS)
+                        .setCursorPosition(2, 1)
+                        .put(ks.toString())
+                        .flush();
+            }
         }
-        t.end();
+    }
+
+    private static boolean shouldQuit(KeyStroke key) {
+        return key != null &&
+                (key.type == KeyType.EOF ||
+                        (key.type == KeyType.CHARACTER &&
+                                key.ctrl && key.c == 'q'));
     }
 
 }

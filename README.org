@@ -131,7 +131,7 @@ int rows = ws.rows;
 Each successful call to ~getTerminalSize()~ caches the returned dimensions. The ~sizeChanged()~ method returns ~true~ when the most recent size query detected dimensions different from the cached value, and consumes that notification. Its initial value is ~true~ so that an application can perform its initial layout. To detect later changes, call ~getTerminalSize()~ before ~sizeChanged()~ in each iteration of the application loop. Terminality does not install a SIGWINCH handler.
 
 ** Example
-See ~BouncyBall.java~ in ~src/main/java/net/prsv/terminality/example~.
+See ~BouncyBall.java~ and ~KeyStrokeDemo.java~ in ~src/main/java/net/prsv/terminality/example~.
 
 ** License
 The project is licensed under the terms of Apache License, version 2.0. See ~LICENSE~ for details.
