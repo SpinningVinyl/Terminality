@@ -16,6 +16,18 @@
  */
 package net.prsv.terminality;
 
+import java.util.Objects;
+import java.util.StringJoiner;
+
+/**
+ * An immutable ANSI Select Graphic Rendition (SGR) sequence used to control
+ * terminal text attributes and colors.
+ *
+ * <p>Predefined renditions are composable: except for {@link #RESET_ALL}, each
+ * constant changes only the attribute or color identified by its name. Custom
+ * renditions can be created by passing SGR parameters to
+ * {@link #TextRendition(String...)}.</p>
+ */
 @SuppressWarnings("unused")
 public class TextRendition {
 
@@ -98,20 +110,33 @@ public class TextRendition {
     
     private final String sequence;
 
+    /**
+     * Creates a text rendition from one or more Select Graphic Rendition (SGR)
+     * parameters. Each non-blank argument is inserted into the generated
+     * {@code ESC[...m} sequence in the supplied order, separated by semicolons.
+     * Blank arguments are ignored.
+     *
+     * @param attributes SGR parameters used to construct the rendition
+     * @throws NullPointerException if {@code attributes} or any element is
+     *         {@code null}
+     * @throws IllegalArgumentException if no arguments are supplied or every
+     *         argument is blank
+     */
     public TextRendition(String... attributes) {
+        Objects.requireNonNull(attributes);
         if (attributes.length == 0) throw new IllegalArgumentException("At least one argument needed");
         boolean nonBlank = false;
-        StringBuilder sb = new StringBuilder(PREFIX);
+        StringJoiner sj = new StringJoiner(SEPARATOR, PREFIX, POSTFIX);
         for (String attribute : attributes) {
+            Objects.requireNonNull(attribute);
             if (attribute.isBlank()) {
                 continue;
             }
             nonBlank = true;
-            sb.append(attribute).append(SEPARATOR);
+            sj.add(attribute);
         }
         if (!nonBlank) throw new IllegalArgumentException("At least one non-blank argument needed");
-        sb.append(POSTFIX);
-        sequence = sb.toString().replace(SEPARATOR + POSTFIX, POSTFIX);
+        sequence = sj.toString();
     }
     
     @Override
