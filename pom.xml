@@ -6,39 +6,50 @@
 
     <groupId>net.prsv.terminality</groupId>
     <artifactId>terminality</artifactId>
-    <version>0.5bmvn</version>
+    <version>1.0</version>
+    <packaging>jar</packaging>
 
     <name>Terminality</name>
-    <description> A simple Java library for working with the Linux terminal.</description>
+    <description>A lightweight Java library for working with POSIX terminals.</description>
     <url>https://github.com/SpinningVinyl/Terminality</url>
-
+    <inceptionYear>2023</inceptionYear>
 
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <junit.version>5.11.0</junit.version>
     </properties>
 
     <licenses>
         <license>
             <name>Apache License, Version 2.0</name>
-            <url>http://www.opensource.org/licenses/mit-license.php</url>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
         </license>
     </licenses>
 
     <developers>
         <developer>
+            <id>SpinningVinyl</id>
             <name>Pavel Urusov</name>
             <email>pavel.urusov@gmail.com</email>
+            <url>https://github.com/SpinningVinyl</url>
         </developer>
     </developers>
 
     <scm>
-        <connection>scm:git:git://github.com/SpinningVinyl/Terminality.git</connection>
+        <connection>scm:git:https://github.com/SpinningVinyl/Terminality.git</connection>
         <developerConnection>scm:git:ssh://git@github.com:SpinningVinyl/Terminality.git</developerConnection>
-        <url>https://github.com/SpinningVinyl/Terminality</url>
+        <url>https://github.com/SpinningVinyl/Terminality/tree/main</url>
+        <tag>HEAD</tag>
     </scm>
+
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/SpinningVinyl/Terminality/issues</url>
+    </issueManagement>
 
     <dependencies>
         <dependency>
