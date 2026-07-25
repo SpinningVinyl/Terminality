@@ -22,6 +22,7 @@ import com.sun.jna.Platform;
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -192,7 +193,7 @@ public class UnixTerminal implements Terminal {
                 resetTextRendition(); // reset FG and BG color
                 clear();
                 setCursorVisibility(true);
-                writeControlSequence((byte) 'H'); // reset the cursor position
+                writeCsi("H"); // reset the cursor position
                 flush();
             }
         } catch (IOException outputFailure) {
@@ -251,20 +252,20 @@ public class UnixTerminal implements Terminal {
 
     @Override
     public UnixTerminal setTitle(String title) throws IOException {
-        writeOutput((ESC + "]2;" + title + "\007").getBytes(charset));
+        writeOsc(2, title);
         flush();
         return this;
     }
 
     @Override
     public UnixTerminal setCursorPosition(int row, int column) throws IOException {
-        writeControlSequence(((row + 1) + ";" + (column + 1) + "H").getBytes());
+        writeCsi((row + 1) + ";" + (column + 1) + "H");
         return this;
     }
 
     @Override
     public UnixTerminal setCursorVisibility(boolean b) throws IOException {
-        writeControlSequence(("?25" + (b ? "h" : "l")).getBytes());
+        writeCsi("?25" + (b ? "h" : "l"));
         return this;
     }
 
@@ -276,7 +277,7 @@ public class UnixTerminal implements Terminal {
                 if (rendition == null) continue;
                 sb.append(rendition);
             }
-            put(sb.toString());
+            writeAnsi(sb.toString());
         }
         return this;
     }
@@ -295,7 +296,7 @@ public class UnixTerminal implements Terminal {
     @Override
     public UnixTerminal put(String str) throws IOException {
         if (str != null) {
-            writeOutput(convertCharset(str));
+            writeText(str);
         }
         return this;
     }
@@ -333,7 +334,7 @@ public class UnixTerminal implements Terminal {
 
     @Override
     public UnixTerminal clear() throws IOException {
-        writeControlSequence((byte) '2', (byte) 'J');
+        writeCsi("2J");
         return this;
     }
 
@@ -438,7 +439,7 @@ public class UnixTerminal implements Terminal {
      * @throws IOException if writing to the output fails for some reason
      */
     public void setTerminalSize(int rows, int columns) throws IOException {
-        writeControlSequence(("8;"+rows+';'+columns+'t').getBytes());
+        writeCsi("8;"+rows+';'+columns+'t');
     }
 
 //  =================== P R I V A T E   M E T H O D S ==================
@@ -501,13 +502,32 @@ public class UnixTerminal implements Terminal {
         }
     }
 
-    private void writeControlSequence(byte... bytes) throws IOException {
-        if (bytes == null) return;
-        byte[] output = new byte[bytes.length + 2];
-        output[0] = (byte) ESC;
-        output[1] = (byte) '[';
-        System.arraycopy(bytes, 0, output, 2, bytes.length);
+    private void writeAnsi(String sequence) throws IOException {
+        for (int index = 0; index < sequence.length(); index++) {
+            if (sequence.charAt(index) > 0x7f) {
+                throw new IllegalArgumentException("ANSI control sequence contains non-ASCII characters");
+            }
+        }
+        writeOutput(sequence.getBytes(StandardCharsets.US_ASCII));
+    }
+
+    private void writeCsi(String body) throws IOException {
+        writeAnsi("\u001b[" + body);
+    }
+
+    private void writeOsc(int command, String payload) throws IOException {
+        Objects.requireNonNull(payload);
+        byte[] prefix = (ESC + "]" + command + ";").getBytes(StandardCharsets.US_ASCII);
+        byte[] text = convertCharset(payload);
+        byte[] output = new byte[prefix.length + text.length + 1];
+        System.arraycopy(prefix, 0, output, 0, prefix.length);
+        System.arraycopy(text, 0, output, prefix.length, text.length);
+        output[output.length - 1] = 0x07;
         writeOutput(output);
+    }
+
+    private void writeText(String text) throws IOException {
+        writeOutput(convertCharset(text));
     }
 
     private synchronized void writeOutput(byte... bytes) throws IOException {
