@@ -14,7 +14,7 @@ public class KeyStrokeDemo {
                 .setCursorPosition(5,5)
                 .put("Press any key combination to show keystroke details, [Ctrl+q] to quit.")
                 .flush();
-
+        t.setTitle("KeyStroke Demo");
         KeyStroke ks;
         boolean quit = false;
 

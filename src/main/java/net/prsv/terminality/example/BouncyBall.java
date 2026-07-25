@@ -12,7 +12,7 @@ public class BouncyBall {
 
         // enter the raw mode, clear the screen, make the cursor invisible and apply the changes
         t.begin().clear().setCursorVisibility(false).flush();
-
+        t.setTitle("Bouncy Ball");
         // declare variables for later use
         String statusBarString;
         StringBuilder filler;
