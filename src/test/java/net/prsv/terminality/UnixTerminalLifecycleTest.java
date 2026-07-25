@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -211,6 +212,58 @@ class UnixTerminalLifecycleTest {
         terminal.setTitle("Terminality");
 
         assertEquals("\u001b]2;Terminality\u0007", output.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void controlSequencesRemainAsciiWithUtf16TextCharset() throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        UnixTerminal terminal = new UnixTerminal(
+                new ByteArrayInputStream(new byte[0]),
+                output,
+                StandardCharsets.UTF_16BE,
+                false,
+                new FakePosixLibC());
+
+        terminal.setCursorPosition(0, 1)
+                .setCursorVisibility(false)
+                .setTextRendition(TextRendition.FG_RED, TextRendition.BG_BLUE_INTENSE)
+                .clear()
+                .put("A");
+        terminal.setTerminalSize(24, 80);
+        terminal.flush();
+
+        ByteArrayOutputStream expected = new ByteArrayOutputStream();
+        expected.writeBytes((
+                "\u001b[1;2H"
+                        + "\u001b[?25l"
+                        + "\u001b[31m"
+                        + "\u001b[104m"
+                        + "\u001b[2J")
+                .getBytes(StandardCharsets.US_ASCII));
+        expected.writeBytes("A".getBytes(StandardCharsets.UTF_16BE));
+        expected.writeBytes("\u001b[8;24;80t".getBytes(StandardCharsets.US_ASCII));
+
+        assertArrayEquals(expected.toByteArray(), output.toByteArray());
+    }
+
+    @Test
+    void titleEncodesOnlyItsPayloadWithUtf16TextCharset() throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        UnixTerminal terminal = new UnixTerminal(
+                new ByteArrayInputStream(new byte[0]),
+                output,
+                StandardCharsets.UTF_16BE,
+                false,
+                new FakePosixLibC());
+
+        terminal.setTitle("A");
+
+        ByteArrayOutputStream expected = new ByteArrayOutputStream();
+        expected.writeBytes("\u001b]2;".getBytes(StandardCharsets.US_ASCII));
+        expected.writeBytes("A".getBytes(StandardCharsets.UTF_16BE));
+        expected.write(0x07);
+
+        assertArrayEquals(expected.toByteArray(), output.toByteArray());
     }
 
     @Test
