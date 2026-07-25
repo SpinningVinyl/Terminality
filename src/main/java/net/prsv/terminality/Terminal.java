@@ -62,7 +62,10 @@ public interface Terminal extends AutoCloseable {
     }
 
     /**
-     * Set the title of the terminal window.
+     * Sets the title of the terminal window and flushes the output buffer.
+     * When chaining output operations, this method should preferably be called
+     * first so that it does not flush operations added earlier in the chain.
+     *
      * @param title Title to be set
      * @throws IOException if there is an error writing to stdout
      */
